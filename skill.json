@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
   "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, navigate_pagination, downloads, and saby_tenders_csv.",
-  "version": "0.3.60",
+  "version": "0.3.62",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",
@@ -121,6 +121,10 @@
             "type": "string",
             "description": "For saby_tenders_csv: optional substring filter applied to each visible tender row text."
           },
+          "subscription_text": {
+            "type": "string",
+            "description": "For saby_tenders_csv: optional Saby subscriptions/sidebar text to select in-page before collecting, e.g. БПЛА."
+          },
           "date_text": {
             "type": "string",
             "description": "For saby_tenders_csv: optional visible date marker for reporting; target date is controlled by target_date."
@@ -151,7 +155,11 @@
           },
           "delay_after_click": {
             "type": "integer",
-            "description": "For saby_tenders_csv: milliseconds to wait after clicking next. Defaults to 600."
+            "description": "For saby_tenders_csv: milliseconds to wait after clicking next. Defaults to 350."
+          },
+          "row_change_timeout_ms": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: maximum milliseconds to wait for rows to change after paging or sidebar selection. Defaults to 2500."
           },
           "stop_after_no_growth": {
             "type": "integer",
@@ -171,7 +179,7 @@
           },
           "initial_rows_timeout_ms": {
             "type": "integer",
-            "description": "For saby_tenders_csv: how long to wait for Saby list rows before collecting. Defaults to 12000."
+            "description": "For saby_tenders_csv: how long to wait for Saby list rows before collecting. Defaults to 8000."
           },
           "lock_wait_seconds": {
             "type": "integer",

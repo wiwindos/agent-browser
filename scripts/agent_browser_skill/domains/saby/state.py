@@ -51,7 +51,13 @@ def json_line(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def build_next_tool_call(profile: str, mode: str, target_date: str = "", filter_text: str = "") -> dict[str, Any]:
+def build_next_tool_call(
+    profile: str,
+    mode: str,
+    target_date: str = "",
+    filter_text: str = "",
+    subscription_text: str = "",
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "action": "saby_tenders_csv",
         "profile": profile,
@@ -62,6 +68,8 @@ def build_next_tool_call(profile: str, mode: str, target_date: str = "", filter_
         payload["target_date"] = target_date
     if filter_text:
         payload["filter_text"] = filter_text
+    if subscription_text:
+        payload["subscription_text"] = subscription_text
     return payload
 
 
@@ -71,6 +79,7 @@ def build_prepared_state(profile: str, args: dict[str, Any], remaining_after_sta
         mode=str(args.get("mode") or "yesterday"),
         target_date=str(args.get("target_date") or "").strip(),
         filter_text=str(args.get("filter_text") or "").strip(),
+        subscription_text=str(args.get("subscription_text") or args.get("subscription") or "").strip(),
     )
     state = {
         "complete": False,
@@ -88,15 +97,17 @@ def build_saby_options(args: dict[str, Any], max_runtime_ms: int) -> dict[str, A
     options = {
         "template": str(args.get("template") or "https://trade.saby.ru/page/tender-card/{id}"),
         "filterText": str(args.get("filter_text") or args.get("text") or "").strip(),
+        "subscriptionText": str(args.get("subscription_text") or args.get("subscription") or "").strip(),
         "targetDate": str(args.get("target_date") or "").strip(),
         "mode": str(args.get("mode") or "yesterday").strip().lower(),
         "dateText": str(args.get("date_text") or "").strip(),
-        "delayAfterClick": int_arg(args, "delay_after_click", 600, 0, 10000),
+        "delayAfterClick": int_arg(args, "delay_after_click", 350, 0, 10000),
+        "rowChangeTimeoutMs": int_arg(args, "row_change_timeout_ms", 2500, 250, 10000),
         "maxClicks": int_arg(args, "max_clicks", 300, 1, 2000),
         "stopAfterNoGrowth": int_arg(args, "stop_after_no_growth", 4, 1, 50),
         "olderBatchConfirmations": int_arg(args, "older_batch_confirmations", 3, 1, 20),
         "maxRuntimeMs": max_runtime_ms,
-        "initialRowsTimeoutMs": int_arg(args, "initial_rows_timeout_ms", 12000, 0, 60000),
+        "initialRowsTimeoutMs": int_arg(args, "initial_rows_timeout_ms", 8000, 0, 60000),
         "resumeState": bool_arg(args, "resume_state", True),
         "resetState": bool_arg(args, "reset_state", False),
         "downloadInBrowser": False,
@@ -125,6 +136,7 @@ def build_saby_metadata(
         mode=str(options.get("mode") or "yesterday"),
         target_date=str(options.get("targetDate") or "").strip(),
         filter_text=str(options.get("filterText") or "").strip(),
+        subscription_text=str(options.get("subscriptionText") or "").strip(),
     )
     steps = result.get("steps")
     if not isinstance(steps, list):
@@ -138,6 +150,8 @@ def build_saby_metadata(
         "script_version": result.get("scriptVersion"),
         "mode": result.get("mode"),
         "filter_text": options.get("filterText") or "",
+        "subscription_text": options.get("subscriptionText") or "",
+        "subscription_selection": result.get("subscriptionSelection"),
         "stop_reason": result.get("stopReason"),
         "complete": complete,
         "prepared": False,
