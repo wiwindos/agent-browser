@@ -15,6 +15,7 @@ from agent_browser_skill.actions_generic import action_snapshot
 from agent_browser_skill.actions_manual import action_read_artifact
 from agent_browser_skill.core.paths import paths_for
 from agent_browser_skill.errors import ToolError
+from agent_browser_skill.domains.saby.state import build_prepared_state, build_saby_options
 
 
 def _paths(tmp_path: Path, action: str = "snapshot") -> dict[str, Path]:
@@ -53,3 +54,23 @@ def test_read_artifact_directory_error_points_to_exact_files(tmp_path: Path) -> 
     assert "Use the exact snapshot_file/state_file/text_file path" in message
     assert "Do not use read_file for browser-artifacts" in message
     assert str(recent) in message
+
+
+def test_saby_subscription_text_is_preserved_in_options_and_resume_call() -> None:
+    args = {
+        "mode": "yesterday",
+        "subscription_text": "БПЛА",
+        "filter_text": "дрон",
+        "delay_after_click": 0,
+    }
+
+    options = build_saby_options(args, max_runtime_ms=60_000)
+    _state, next_tool_call = build_prepared_state("saby", args, remaining_after_start_ms=30_000)
+
+    assert options["subscriptionText"] == "БПЛА"
+    assert options["filterText"] == "дрон"
+    assert options["delayAfterClick"] == 0
+    assert options["rowChangeTimeoutMs"] == 2500
+    assert options["initialRowsTimeoutMs"] == 8000
+    assert next_tool_call["subscription_text"] == "БПЛА"
+    assert next_tool_call["filter_text"] == "дрон"

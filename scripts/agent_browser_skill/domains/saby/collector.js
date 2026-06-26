@@ -2,7 +2,7 @@
   "use strict";
 
   const options = window.__SABY_TENDERS_OPTIONS__ || {};
-  const SCRIPT_VERSION = "0.3.59";
+  const SCRIPT_VERSION = "0.3.62";
   const STARTED_AT = Date.now();
   const MAX_RUNTIME_MS = Math.max(0, Number(options.maxRuntimeMs || 0));
   const SELECTORS = options.selectors || {};
@@ -290,6 +290,87 @@
     el.click();
   }
 
+  function candidateLooksSelected(el) {
+    const cls = String(el?.className || "");
+    return (
+      el?.getAttribute?.("aria-selected") === "true" ||
+      el?.getAttribute?.("aria-pressed") === "true" ||
+      /selected|active|checked|current/i.test(cls)
+    );
+  }
+
+  function scoreSubscriptionCandidate(el, needle) {
+    const text = norm(el.innerText || el.textContent || "");
+    const lower = text.toLowerCase();
+    if (!lower || !lower.includes(needle)) return -1;
+
+    let score = lower === needle ? 1000 : 500;
+    const cls = String(el.className || "");
+    const role = norm(el.getAttribute("role"));
+    const qa = norm(el.getAttribute("data-qa"));
+    const tag = String(el.tagName || "").toLowerCase();
+
+    if (/(button|menuitem|treeitem|option|link|checkbox|tab)/i.test(role)) score += 100;
+    if (/button|a|label/.test(tag)) score += 80;
+    if (/filter|subscription|subscribe|rubric|category|side|navigation|Navigation|Tree/i.test(cls + " " + qa)) score += 70;
+    if (el.closest("aside, nav, [class*='side'], [class*='Side'], [class*='Navigation'], [class*='Tree']")) score += 60;
+    if (candidateLooksSelected(el)) score += 30;
+    score -= Math.min(text.length, 300) / 10;
+
+    return score;
+  }
+
+  function findSubscriptionCandidate(text) {
+    const needle = norm(text).toLowerCase();
+    if (!needle) return null;
+
+    const nodes = Array.from(
+      document.querySelectorAll(
+        "button, a, label, [role='button'], [role='treeitem'], [role='menuitem'], [role='option'], [role='checkbox'], [tabindex], div, span"
+      )
+    );
+    const scored = nodes
+      .map((el) => ({ el, score: scoreSubscriptionCandidate(el, needle) }))
+      .filter((item) => item.score >= 0)
+      .sort((a, b) => b.score - a.score);
+
+    return scored[0]?.el || null;
+  }
+
+  async function selectSubscriptionIfNeeded() {
+    const text = norm(options.subscriptionText || "");
+    if (!text) {
+      return { requested: false, selected: false, reason: "subscriptionText is empty" };
+    }
+
+    const beforeItems = collectAllRows({ silent: true });
+    const beforeSignature = visibleRowsSignature(beforeItems);
+    const candidate = findSubscriptionCandidate(text);
+    if (!candidate) {
+      return { requested: true, selected: false, reason: "subscription candidate not found", text };
+    }
+
+    const alreadySelected = candidateLooksSelected(candidate);
+    if (!alreadySelected) {
+      strongClick(candidate);
+      const clickDelay = Math.min(1000, Math.max(100, Number(options.delayAfterClick || 350)));
+      await sleep(clickDelay);
+      await waitForRowsChanged(
+        beforeSignature,
+        beforeItems.length,
+        Math.min(3000, Math.max(500, Number(options.rowChangeTimeoutMs || 2500)))
+      );
+    }
+
+    return {
+      requested: true,
+      selected: true,
+      alreadySelected,
+      text,
+      clickedText: norm(candidate.innerText || candidate.textContent || "").slice(0, 200),
+    };
+  }
+
   function scrollForMoreRows() {
     const scroller = findScrollContainer();
     if (!scroller) return false;
@@ -373,7 +454,7 @@
   }
 
   async function collectYesterday({
-    delayAfterClick = Number(options.delayAfterClick || 600),
+    delayAfterClick = Number(options.delayAfterClick || 350),
     maxClicks = Number(options.maxClicks || 300),
     stopAfterNoGrowth = Number(options.stopAfterNoGrowth || 4),
     olderBatchConfirmations = Number(options.olderBatchConfirmations || 3),
@@ -503,7 +584,8 @@
         break;
       }
 
-      const changeTimeout = Math.min(5000, Math.max(250, remainingRuntimeMs()));
+      const configuredChangeTimeout = Number(options.rowChangeTimeoutMs || 2500);
+      const changeTimeout = Math.min(configuredChangeTimeout, Math.max(250, remainingRuntimeMs()));
       let changed = await waitForRowsChanged(beforeSignature, beforeCount, changeTimeout);
 
       if (!changed && action === "next-click" && !runtimeExpired()) {
@@ -512,7 +594,7 @@
         if (scrollForMoreRows()) {
           const afterClickItems = collectAllRows({ silent: true });
           const afterClickSignature = visibleRowsSignature(afterClickItems);
-          const fallbackTimeout = Math.min(5000, Math.max(250, remainingRuntimeMs()));
+          const fallbackTimeout = Math.min(configuredChangeTimeout, Math.max(250, remainingRuntimeMs()));
           changed = await waitForRowsChanged(
             afterClickSignature,
             afterClickItems.length,
@@ -590,6 +672,8 @@
     visibleRowsSignature,
   };
 
+  const subscriptionSelection = await selectSubscriptionIfNeeded();
+
   let items;
   if (options.mode === "visible") {
     items = collectAllRows();
@@ -626,6 +710,8 @@
     withId: items.filter((item) => item.internalId).length,
     mode: options.mode || "yesterday",
     filterText: options.filterText || "",
+    subscriptionText: options.subscriptionText || "",
+    subscriptionSelection,
     stopReason: window.SabyTenderLinks.lastRun?.stopReason || "",
     complete,
     resumed: Boolean(window.SabyTenderLinks.lastRun?.resumed),

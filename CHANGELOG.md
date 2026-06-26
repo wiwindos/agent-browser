@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.62
+
+- Added `subscription_text` for `saby_tenders_csv`, allowing the collector to select a Saby subscriptions/sidebar item such as `БПЛА` directly in-page before collecting.
+- Reduced default Saby collector waits for faster scheduled exports: `delay_after_click` now defaults to 350ms, `initial_rows_timeout_ms` to 8000ms, and `row_change_timeout_ms` defaults to 2500ms.
+- Reported Saby subscription-selection diagnostics in collector results and output so slow or missed sidebar selection can be traced.
+
 ## 0.3.61
 
 - Added empty-snapshot recovery guidance to `AUTOLOAD.md` and `SKILL.md` so agents read the exact `snapshot_file` artifact before trying desktop fallbacks or screenshots.
