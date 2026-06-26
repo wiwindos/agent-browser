@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "output": "profile alias saved: example: *.example.com, example.com, login.example-id.com",
+  "metadata": {
+    "site_key": "example",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\example",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\example\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\example\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\example\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\example\\<TIMESTAMP>\\logs",
+    "profile_aliases": {
+      "example": [
+        "*.example.com",
+        "example.com",
+        "login.example-id.com"
+      ],
+      "saby": [
+        "saby.ru",
+        "*.saby.ru"
+      ]
+    },
+    "profile_aliases_file": "<WORKSPACE>\\.agent-browser\\profile-aliases.json"
+  }
+}

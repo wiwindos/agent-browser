@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "output": "open_ok=true\nurl: https://example.com\nwait_until: networkidle\nopen_result: opened page\ntitle: Example\nrefs_count: 1\nsnapshot_file: <WORKSPACE>\\browser-artifacts\\example.com\\<TIMESTAMP>\\logs\\<STAMP>-open-snapshot.json",
+  "metadata": {
+    "site_key": "example.com",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\example.com",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\example.com\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\example.com\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\example.com\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\example.com\\<TIMESTAMP>\\logs",
+    "snapshot_file": "<WORKSPACE>\\browser-artifacts\\example.com\\<TIMESTAMP>\\logs\\<STAMP>-open-snapshot.json",
+    "snapshot_title": "Example",
+    "snapshot_refs_count": 1
+  }
+}

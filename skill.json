@@ -1,0 +1,338 @@
+{
+  "name": "agent-browser",
+  "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, navigate_pagination, downloads, and saby_tenders_csv.",
+  "version": "0.3.60",
+  "author": "LocalTopSH",
+  "system_prompt_file": "SKILL.md",
+  "autoload_prompt_file": "AUTOLOAD.md",
+  "enabled": true,
+  "autoload": true,
+  "priority": 100,
+  "protected_paths": [
+    ".agent-browser/**",
+    "browser-artifacts/**"
+  ],
+  "exclusive_tool": "skill_agent-browser_browser",
+  "tools": [
+    {
+      "name": "browser",
+      "description": "Skill-owned browser automation tool. Runs only through the per-user sandbox and wraps agent-browser CLI with safe profiles, artifacts, compact snapshots, protected artifact reading, pagination helpers, screenshots, login sessions, challenge handoff, manual_desktop, desktop_open, continue_after_manual, downloads, cleanup, and saby_tenders_csv export.",
+      "script": "scripts/browser_tool.py",
+      "runtime": "python",
+      "autoload_base": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "skills",
+              "open",
+              "snapshot",
+              "click",
+              "fill",
+              "type",
+              "wait",
+              "screenshot",
+              "share_session",
+              "manual_desktop",
+              "stop_desktop",
+              "close_manual_access",
+              "desktop_open",
+              "desktop_snapshot",
+              "desktop_screenshot",
+              "evaluate",
+              "read_artifact",
+              "navigate_pagination",
+              "downloads",
+              "saby_tenders_csv",
+              "challenge_detected",
+              "continue_after_manual",
+              "batch",
+              "run",
+              "login",
+              "clear_session",
+              "close",
+              "recover",
+              "status",
+              "profile_aliases",
+              "set_profile_alias",
+              "cleanup"
+            ],
+            "description": "Browser operation to run."
+          },
+          "url": {
+            "type": "string",
+            "description": "URL to open. Required for open/login unless command batch includes navigation."
+          },
+          "site_key": {
+            "type": "string",
+            "description": "Stable site/session key, e.g. github.com or github. Defaults to URL host when possible."
+          },
+          "profile": {
+            "type": "string",
+            "description": "Optional browser profile name. Defaults to site_key or default."
+          },
+          "domains": {
+            "type": "array",
+            "description": "For set_profile_alias: domains or wildcard domains that share one auth/profile group, e.g. [\"example.com\", \"*.login.example.com\"].",
+            "items": {
+              "type": "string"
+            }
+          },
+          "domain": {
+            "type": "string",
+            "description": "For set_profile_alias: one domain or a comma/space separated domain list."
+          },
+          "selector": {
+            "type": "string",
+            "description": "Element ref or selector, e.g. @e3, text=Submit, #submit."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text for fill/type/wait operations. Sensitive values are redacted from output."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Screenshot or report filename. Must stay inside browser-artifacts."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "For downloads: glob pattern to list/wait for inside skill-managed download artifact directories. Defaults to *.csv."
+          },
+          "path": {
+            "type": "string",
+            "description": "For read_artifact: full path to a file inside browser-artifacts."
+          },
+          "file": {
+            "type": "string",
+            "description": "Alias for read_artifact path."
+          },
+          "max_chars": {
+            "type": "integer",
+            "description": "For read_artifact: maximum number of characters to return from the artifact excerpt."
+          },
+          "target": {
+            "type": "string",
+            "description": "For navigate_pagination: target pagination direction, one of first, prev, next, last."
+          },
+          "filter_text": {
+            "type": "string",
+            "description": "For saby_tenders_csv: optional substring filter applied to each visible tender row text."
+          },
+          "date_text": {
+            "type": "string",
+            "description": "For saby_tenders_csv: optional visible date marker for reporting; target date is controlled by target_date."
+          },
+          "target_date": {
+            "type": "string",
+            "description": "For saby_tenders_csv: target publish date in YYYY-MM-DD. Defaults to yesterday in the browser timezone."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "yesterday",
+              "visible"
+            ],
+            "description": "For saby_tenders_csv: collect yesterday with paging, or only currently visible rows."
+          },
+          "template": {
+            "type": "string",
+            "description": "For saby_tenders_csv: tender-card URL template. Defaults to https://trade.saby.ru/page/tender-card/{id}."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: optional maximum number of exported visible rows."
+          },
+          "max_clicks": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: max paging clicks while collecting yesterday. Defaults to 300."
+          },
+          "delay_after_click": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: milliseconds to wait after clicking next. Defaults to 600."
+          },
+          "stop_after_no_growth": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: stop after this many next clicks add no rows. Defaults to 4."
+          },
+          "older_batch_confirmations": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: require this many consecutive new batches older than the target date before marking collection complete. Defaults to 3."
+          },
+          "max_runtime_ms": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: maximum in-page collection runtime in milliseconds. Defaults to slightly less than the tool timeout so the action can return diagnostics instead of timing out."
+          },
+          "auto_resume_passes": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: bounded extra in-page resume passes inside the same tool call when there is enough timeout budget. Defaults to 1, max 3."
+          },
+          "initial_rows_timeout_ms": {
+            "type": "integer",
+            "description": "For saby_tenders_csv: how long to wait for Saby list rows before collecting. Defaults to 12000."
+          },
+          "lock_wait_seconds": {
+            "type": "integer",
+            "description": "How long to wait for another browser action in the same sandbox before returning agent_browser_busy=true. Defaults to 8, max 60."
+          },
+          "keep_manual_browser": {
+            "type": "boolean",
+            "description": "For saby_tenders_csv: keep the manual browser lock after a complete export. Defaults to false so queued browser tasks can continue."
+          },
+          "collect_after_start": {
+            "type": "boolean",
+            "description": "For saby_tenders_csv: if it had to start manual desktop itself, also attempt collection in the same call. Defaults to false to avoid fresh-sandbox timeout."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "For close/recover/stop actions only: explicitly interrupt another profile's manual browser lock. Defaults to false."
+          },
+          "resume_state": {
+            "type": "boolean",
+            "description": "For saby_tenders_csv: resume the previous in-page collection state for the same target date/filter/template. Defaults to true."
+          },
+          "reset_state": {
+            "type": "boolean",
+            "description": "For saby_tenders_csv: clear any previous in-page collection state before collecting. Use for a fresh run."
+          },
+          "commands": {
+            "type": "array",
+            "description": "Batch commands. Each item may be a command string or an array such as [\"open\", \"https://example.com\"].",
+            "items": {}
+          },
+          "task": {
+            "type": "string",
+            "description": "Natural language task for agent-browser chat/run style automation."
+          },
+          "script": {
+            "type": "string",
+            "description": "JavaScript source for action=evaluate. Runs in the current manual desktop Chrome page through CDP."
+          },
+          "code": {
+            "type": "string",
+            "description": "Alias for script for action=evaluate."
+          },
+          "skill": {
+            "type": "string",
+            "description": "Upstream agent-browser skill name for action=skills. Defaults to core."
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Use full upstream skill instructions for action=skills."
+          },
+          "install": {
+            "type": "boolean",
+            "description": "For action=start only: attempt best-effort runtime bootstrap if agent-browser is missing."
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Command timeout in seconds. Defaults to 60, max 120."
+          },
+          "wait_until": {
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle"
+            ],
+            "description": "Optional load state after open. Defaults to networkidle for open/login."
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Ask agent-browser for JSON output when the underlying command supports it."
+          },
+          "screenshot": {
+            "type": "boolean",
+            "description": "For challenge_detected/continue_after_manual: save a screenshot. Defaults to true."
+          },
+          "dashboard_port": {
+            "type": "integer",
+            "description": "Dashboard/live session port. Defaults to PORT_BASE+8 inside the sandbox."
+          },
+          "dashboard_internal_port": {
+            "type": "integer",
+            "description": "Internal agent-browser dashboard port inside sandbox. Defaults to 4848; exposed through dashboard_port via skill-managed TCP proxy."
+          },
+          "public_host": {
+            "type": "string",
+            "description": "Public server host for dashboard URL, without scheme. If omitted, output uses <server-host> placeholder."
+          },
+          "public_url": {
+            "type": "string",
+            "description": "Full externally reachable dashboard URL override."
+          },
+          "vnc_port": {
+            "type": "integer",
+            "description": "Internal VNC port for manual_desktop. Defaults to 5900."
+          },
+          "desktop_cdp_port": {
+            "type": "integer",
+            "description": "Internal Chrome DevTools Protocol port for manual_desktop desktop_* actions. Defaults to 9222."
+          },
+          "display": {
+            "type": "string",
+            "description": "X display for manual_desktop. Defaults to :99."
+          },
+          "width": {
+            "type": "integer",
+            "description": "Manual desktop width. Defaults to 1365."
+          },
+          "height": {
+            "type": "integer",
+            "description": "Manual desktop height. Defaults to 900."
+          },
+          "handoff": {
+            "type": "string",
+            "enum": [
+              "manual_desktop",
+              "dashboard"
+            ],
+            "description": "Manual challenge handoff mode for challenge_detected. Defaults to manual_desktop/noVNC."
+          },
+          "live_check_seconds": {
+            "type": "integer",
+            "description": "For challenge_detected with manual_desktop: seconds to poll the live desktop before asking the user for manual captcha work. Defaults to 10, max 30."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  ],
+  "triggers": [
+    "agent-browser",
+    "browser",
+    "agent-browser browser",
+    "skill_agent-browser_browser",
+    "desktop_open",
+    "manual_desktop",
+    "saby_tenders_csv",
+    "saby",
+    "sbis",
+    "сбис",
+    "тендеры",
+    "торги",
+    "noVNC",
+    "novnc",
+    "web ui",
+    "ui test",
+    "frontend test",
+    "screenshot",
+    "login",
+    "auth",
+    "open site",
+    "браузер",
+    "сайт",
+    "открой сайт",
+    "кликни",
+    "форма",
+    "логин",
+    "авторизация",
+    "скриншот",
+    "проверь ui",
+    "протестируй сайт"
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "success": true,
+  "output": "saby_diag skill=<VERSION> complete=false prepared=true reason=manual desktop started; collection deferred\nsaby_tenders_csv_ok=true\ncollection_complete: false\nprepared_for_collection: true\nitems_exported: 0\nremaining_after_start_ms: <INT>\nnext_action: call action=saby_tenders_csv with the same profile/mode/target_date and resume_state=true without url\nnext_tool_call: {\"action\":\"saby_tenders_csv\",\"profile\":\"saby\",\"mode\":\"yesterday\",\"resume_state\":true}\ncsv: <WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads\\saby_tenders_<TIMESTAMP>.csv\ntrace_log: <WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs\\saby_tenders_trace.jsonl\n\nsaby_tenders_started_manual_desktop=true\nmanual_desktop_url=http://example.test/vnc.html",
+  "metadata": {
+    "site_key": "saby",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\saby",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs",
+    "saby_tenders": {
+      "complete": false,
+      "prepared": true,
+      "stop_reason": "manual desktop started; collection deferred to next tool call",
+      "next_action": "call action=saby_tenders_csv with the same profile/mode/target_date and resume_state=true without url",
+      "next_tool_call": {
+        "action": "saby_tenders_csv",
+        "profile": "saby",
+        "mode": "yesterday",
+        "resume_state": true
+      },
+      "remaining_after_start_ms": "<INT>"
+    },
+    "next_tool_call": {
+      "action": "saby_tenders_csv",
+      "profile": "saby",
+      "mode": "yesterday",
+      "resume_state": true
+    },
+    "downloads": [
+      "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads\\saby_tenders_<TIMESTAMP>.csv"
+    ],
+    "csv": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads\\saby_tenders_<TIMESTAMP>.csv",
+    "saby_trace_log": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs\\saby_tenders_trace.jsonl",
+    "browser_workflow": {
+      "workflow_state": "session_resumable",
+      "user_action_required": false,
+      "constraints": {
+        "do_not_use_shell": true,
+        "do_not_infer_public_host": true,
+        "do_not_repeat_tool_discovery": true
+      },
+      "recommended_next_action": "saby_tenders_csv",
+      "recommended_next_args": {
+        "profile": "saby",
+        "mode": "yesterday",
+        "resume_state": true
+      },
+      "next_tool_call": {
+        "action": "saby_tenders_csv",
+        "profile": "saby",
+        "mode": "yesterday",
+        "resume_state": true
+      },
+      "user_message_hint": "The browser session is ready. Continue with the suggested browser tool call instead of re-opening the desktop or rediscovering tools."
+    },
+    "workflow_state": "session_resumable",
+    "user_action_required": false,
+    "constraints": {
+      "do_not_use_shell": true,
+      "do_not_infer_public_host": true,
+      "do_not_repeat_tool_discovery": true
+    },
+    "recommended_next_action": "saby_tenders_csv",
+    "recommended_next_args": {
+      "profile": "saby",
+      "mode": "yesterday",
+      "resume_state": true
+    },
+    "user_message_hint": "The browser session is ready. Continue with the suggested browser tool call instead of re-opening the desktop or rediscovering tools."
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "output": "cleanup complete\nremoved entries: 1\nworkspace size: <SIZE_MB>\nremoved empty artifact browser-artifacts\\saby\\<TIMESTAMP>",
+  "metadata": {
+    "site_key": "saby",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\saby",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs"
+  }
+}

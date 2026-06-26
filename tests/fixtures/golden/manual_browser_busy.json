@@ -1,0 +1,36 @@
+{
+  "success": true,
+  "output": "manual_browser_busy=true\nbusy_profile: saby\nrequested_profile: github\nsame_profile: false\ncompatible_same_profile_action: false\nbusy_action: manual_desktop\nbusy_url: (unknown)\nrequested_action: manual_desktop\nbusy_since: <DATETIME>\nexpires_at: <DATETIME>\nreplacement_allowed: true\nretry_later=true\nA new manual-browser task may safely replace the current same-user session.\nreplacement_reason: same sandbox user requested a new manual browser task on a different profile",
+  "metadata": {
+    "site_key": "github",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\github",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\github\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\github\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\github\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\github\\<TIMESTAMP>\\logs",
+    "manual_browser_busy": true,
+    "busy_profile": "saby",
+    "requested_profile": "github",
+    "same_profile": false,
+    "compatible_same_profile_action": false,
+    "replacement_allowed": true,
+    "replacement_reason": "same sandbox user requested a new manual browser task on a different profile",
+    "busy_user_id": null,
+    "busy_chat_id": null,
+    "manual_browser_lock": {
+      "resource": "manual_browser",
+      "profile": "saby",
+      "profile_path": "<WORKSPACE>\\.agent-browser\\profiles\\saby",
+      "action": "manual_desktop",
+      "url": "",
+      "user_id": null,
+      "chat_id": null,
+      "session_id": null,
+      "source": null,
+      "state": "READY",
+      "created_at": "<FLOAT_TS>",
+      "updated_at": "<FLOAT_TS>",
+      "expires_at": "<FLOAT_TS>"
+    }
+  }
+}

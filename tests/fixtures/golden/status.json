@@ -1,0 +1,48 @@
+{
+  "success": true,
+  "output": "agent-browser skill status\nprofiles: saby\nartifact sites: (none)\ncurrent profile: <WORKSPACE>\\.agent-browser\\profiles\\saby\nmanual_browser_lock: free\nlast_url: (none)\ncookies db: no\nprofile aliases: saby=[saby.ru, *.saby.ru]\ncurrent artifact_dir: <WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\nworkspace size: <SIZE_MB>\nprocess resources: <RESOURCE_STATUS>",
+  "metadata": {
+    "site_key": "saby",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\saby",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs",
+    "diagnostics": {
+      "generated_at": "<TIMESTAMP_ISO>",
+      "skill_version": "<VERSION>",
+      "workspace_root": "<WORKSPACE>",
+      "workspace_size_bytes": "<INT>",
+      "site_key": "saby",
+      "profile": "<WORKSPACE>\\.agent-browser\\profiles\\saby",
+      "current_artifact_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>",
+      "last_url": "",
+      "profiles": [
+        "saby"
+      ],
+      "artifact_sites": [],
+      "profile_aliases": {
+        "saby": [
+          "saby.ru",
+          "*.saby.ru"
+        ]
+      },
+      "manual_browser_lock": null,
+      "manual_desktop_running": false,
+      "resources": {
+        "status_line": "<RESOURCE_STATUS>",
+        "pids_current": "<INT_OR_NULL>",
+        "pids_limit": "<INT_OR_NULL>",
+        "zombies": "<INT_OR_NULL>",
+        "exhausted": false
+      },
+      "logs": {
+        "tool_runs_jsonl": "<WORKSPACE>\\.agent-browser\\logs\\tool-runs.jsonl"
+      },
+      "artifact_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>",
+      "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\screenshots",
+      "downloads_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads",
+      "logs_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs"
+    }
+  }
+}

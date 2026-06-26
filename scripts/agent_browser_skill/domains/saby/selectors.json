@@ -1,0 +1,5 @@
+{
+  "row": "[class*=\"controls-ListView__itemContent\"]",
+  "next": "[data-qa=\"Paging__Next\"], .controls-Paging__btn-Next, [title*=\"Р’РїРµСЂ\"], [aria-label*=\"Р’РїРµСЂ\"], button, [role=\"button\"]",
+  "date": ".tender-ItemTemplate__publishdate"
+}

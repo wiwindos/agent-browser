@@ -1,0 +1,71 @@
+{
+  "success": true,
+  "output": "manual_desktop_started=true\nmanual_desktop_url: http://example.test:4898/vnc.html?autoconnect=1&resize=scale\npublic_port: 4898\nvnc_port: 5900\ndesktop_cdp_port: 9222\nvnc_passcode: 123456\ndisplay: :99\nprofile: <WORKSPACE>\\.agent-browser\\profiles\\saby\nnext_step: wait for the user's next completion confirmation message, then call action=continue_after_manual with the same profile/url if the page still needs manual interaction.\nOpen the URL, complete the Cloudflare/captcha/login check in the real server-side Chrome window, then wait for the user's next completion confirmation message. Do not require an exact trigger word.\nbootstrap: browser deps ready\nbootstrap: desktop deps ready",
+  "metadata": {
+    "site_key": "saby",
+    "profile": "<WORKSPACE>\\.agent-browser\\profiles\\saby",
+    "artifact_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>",
+    "screenshots_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\screenshots",
+    "downloads_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\downloads",
+    "logs_dir": "<WORKSPACE>\\browser-artifacts\\saby\\<TIMESTAMP>\\logs",
+    "manual_desktop_url": "http://example.test:4898/vnc.html?autoconnect=1&resize=scale",
+    "dashboard_url": "http://example.test:4898/vnc.html?autoconnect=1&resize=scale",
+    "dashboard_port": 4898,
+    "vnc_port": 5900,
+    "desktop_cdp_port": 9222,
+    "manual_access_password_required": true,
+    "display": ":99",
+    "browser_workflow": {
+      "workflow_state": "awaiting_user_completion",
+      "user_action_required": true,
+      "constraints": {
+        "do_not_use_shell": true,
+        "do_not_infer_public_host": true,
+        "do_not_repeat_tool_discovery": true
+      },
+      "recommended_next_action": "continue_after_manual",
+      "recommended_next_args": {
+        "profile": "saby",
+        "url": "https://trade.saby.ru/page/tenders-all"
+      },
+      "next_tool_call": {
+        "action": "continue_after_manual",
+        "profile": "saby",
+        "url": "https://trade.saby.ru/page/tenders-all"
+      },
+      "external_urls": {
+        "manual_desktop_url": "http://example.test:4898/vnc.html?autoconnect=1&resize=scale",
+        "dashboard_url": "http://example.test:4898/vnc.html?autoconnect=1&resize=scale"
+      },
+      "credentials_to_show_user": {
+        "vnc_passcode": "123456"
+      },
+      "user_message_hint": "The user must use the manual browser session if the page still shows a login, captcha, or challenge."
+    },
+    "workflow_state": "awaiting_user_completion",
+    "user_action_required": true,
+    "constraints": {
+      "do_not_use_shell": true,
+      "do_not_infer_public_host": true,
+      "do_not_repeat_tool_discovery": true
+    },
+    "recommended_next_action": "continue_after_manual",
+    "recommended_next_args": {
+      "profile": "saby",
+      "url": "https://trade.saby.ru/page/tenders-all"
+    },
+    "next_tool_call": {
+      "action": "continue_after_manual",
+      "profile": "saby",
+      "url": "https://trade.saby.ru/page/tenders-all"
+    },
+    "external_urls": {
+      "manual_desktop_url": "http://example.test:4898/vnc.html?autoconnect=1&resize=scale",
+      "dashboard_url": "http://example.test:4898/vnc.html?autoconnect=1&resize=scale"
+    },
+    "credentials_to_show_user": {
+      "vnc_passcode": "123456"
+    },
+    "user_message_hint": "The user must use the manual browser session if the page still shows a login, captcha, or challenge."
+  }
+}
