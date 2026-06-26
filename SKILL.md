@@ -10,6 +10,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 
 - Normal webpage: `open` -> `snapshot` -> `click` / `fill` / `wait` -> `screenshot`.
 - Generic multi-step browser task: call `action=skills skill=core full=true` first, then continue through the single `browser` tool.
+- Empty or unusable snapshot: if `snapshot_ok=true` but `refs_count=0`, `title=(unknown)`, or useful page text is missing, read the exact returned `snapshot_file` with `read_artifact`; if still unusable, use `desktop_open` -> `desktop_snapshot` on the same profile/url before trying `screenshot`.
 - Authenticated site: use `login` with a stable `profile`; see `reference/auth-and-profiles.md`.
 - Manual desktop or classic noVNC: use `manual_desktop` or `desktop_open`; see `reference/manual-desktop-and-novnc.md`.
 - Captcha or Cloudflare handoff: use `challenge_detected`, wait for the user, then `continue_after_manual`; see `reference/manual-desktop-and-novnc.md`.
@@ -38,6 +39,8 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - If the tool output already contains `next_step:` or `next_tool_call`, follow that directly instead of searching for more tools or reading local skill files.
 - Do not use `read_file` or shell tools to open files under `browser-artifacts/`; use `read_artifact`.
 - `read_artifact` requires a file path. Do not pass a directory path.
+- Never pass an artifact run directory to `read_artifact`; pass the exact file path returned as `snapshot_file`, `state_file`, `text_file`, or another `*_file`.
+- Do not use `screenshot` as the first recovery step for an empty snapshot.
 - Do not use large raw `evaluate` dumps for page text or HTML if `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
 
 ## References
