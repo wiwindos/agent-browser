@@ -19,6 +19,28 @@ from agent_browser_skill.runtime import dependencies as runtime_deps
 from agent_browser_skill.runtime.process import run_process, unlock_profile
 
 
+def _snapshot_empty(parsed: dict[str, Any], refs_count: int) -> bool:
+    title = str(parsed.get("title") or "").strip().lower()
+    return refs_count == 0 or title in {"", "(unknown)", "unknown", "none", "null"}
+
+
+def _empty_snapshot_guidance(snapshot_file: Path) -> list[str]:
+    next_tool_call = {"action": "read_artifact", "path": str(snapshot_file)}
+    return [
+        (
+            "next_step: Snapshot is empty or has no usable refs/title. "
+            "Call action=read_artifact with the exact snapshot_file path. "
+            "Do not pass the artifact directory."
+        ),
+        f"next_tool_call: {json.dumps(next_tool_call, ensure_ascii=False)}",
+        (
+            "fallback_after_read: If the artifact is still unusable, call action=desktop_open "
+            "with the same profile/url, then action=desktop_snapshot. Do not call screenshot "
+            "as recovery unless explicitly requested."
+        ),
+    ]
+
+
 def action_start(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     timeout = timeout_from(args)
     bootstrap_notes = []
@@ -204,6 +226,8 @@ def action_open(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tup
                     f"snapshot_file: {snapshot_file}",
                 ]
             )
+            if _snapshot_empty(parsed, refs_count):
+                output_lines.extend(_empty_snapshot_guidance(snapshot_file))
             meta.update(
                 {
                     "snapshot_file": str(snapshot_file),
@@ -246,14 +270,15 @@ def action_snapshot(root: Path, paths: dict[str, Path], args: dict[str, Any]) ->
                 "snapshot_refs_count": refs_count,
             }
         )
-        output = "\n".join(
-            [
-                "snapshot_ok=true",
-                f"title: {parsed.get('title') or '(unknown)'}",
-                f"refs_count: {refs_count}",
-                f"snapshot_file: {snapshot_file}",
-            ]
-        )
+        output_lines = [
+            "snapshot_ok=true",
+            f"title: {parsed.get('title') or '(unknown)'}",
+            f"refs_count: {refs_count}",
+            f"snapshot_file: {snapshot_file}",
+        ]
+        if _snapshot_empty(parsed, refs_count):
+            output_lines.extend(_empty_snapshot_guidance(snapshot_file))
+        output = "\n".join(output_lines)
         return output, meta
     snapshot_file = write_text_artifact(root, paths, "snapshot", out)
     meta["snapshot_file"] = str(snapshot_file)
