@@ -12,7 +12,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from agent_browser_skill.actions_generic import action_snapshot
-from agent_browser_skill.actions_manual import action_read_artifact
+from agent_browser_skill.actions_manual import action_desktop_open, action_read_artifact
 from agent_browser_skill.core.paths import paths_for
 from agent_browser_skill.errors import ToolError
 from agent_browser_skill.domains.saby.state import build_prepared_state, build_saby_options
@@ -74,3 +74,44 @@ def test_saby_subscription_text_is_preserved_in_options_and_resume_call() -> Non
     assert options["initialRowsTimeoutMs"] == 8000
     assert next_tool_call["subscription_text"] == "БПЛА"
     assert next_tool_call["filter_text"] == "дрон"
+
+
+def test_desktop_open_recovers_stale_manual_desktop_cdp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+    calls: list[str] = []
+
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: True)
+
+    def stale_navigate(args: dict[str, object], url: str) -> None:
+        calls.append(f"navigate:{url}")
+        raise ToolError("manual desktop CDP is not reachable on 127.0.0.1:9222: timed out")
+
+    def fake_stop(root: Path) -> str:
+        calls.append("stop")
+        return "stopped: chrome"
+
+    def fake_unlock(profile: Path) -> list[str]:
+        calls.append(f"unlock:{profile.name}")
+        return []
+
+    def fake_manual(root: Path, paths: dict[str, Path], args: dict[str, object]) -> tuple[str, dict[str, object]]:
+        calls.append("manual")
+        return "manual_desktop_started=true", {"manual_desktop_active": True}
+
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.desktop_navigate", stale_navigate)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.process_runtime.stop_manual_desktop", fake_stop)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.process_runtime.unlock_profile", fake_unlock)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.action_manual_desktop", fake_manual)
+
+    output, meta = action_desktop_open(
+        tmp_path,
+        paths,
+        {"action": "desktop_open", "profile": "example", "url": "https://example.com"},
+    )
+
+    assert calls == ["navigate:https://example.com", "stop", "unlock:example.com", "manual"]
+    assert "desktop_open_recovered_stale_cdp=true" in output
+    assert "manual_desktop_started=true" in output
+    assert meta["desktop_open_started_manual_desktop"] is True
+    assert meta["desktop_open_recovered_stale_cdp"] is True
+    assert meta["manual_desktop_stop"] == "stopped: chrome"

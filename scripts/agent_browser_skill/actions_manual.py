@@ -755,14 +755,35 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
         meta["desktop_open_started_manual_desktop"] = True
         return "\n".join(["desktop_open_started_manual_desktop=true", output]), meta
     remember_url(root, paths, url)
-    desktop.desktop_navigate(args, url)
-    time.sleep(2.0)
-    state = desktop.desktop_page_state(args)
+    try:
+        desktop.desktop_navigate(args, url)
+        time.sleep(2.0)
+        state = desktop.desktop_page_state(args)
+    except ToolError as exc:
+        if "CDP" not in str(exc) and "DevTools" not in str(exc):
+            raise
+        stop_note = process_runtime.stop_manual_desktop(root)
+        process_runtime.unlock_profile(paths["profile"])
+        output, meta = action_manual_desktop(root, paths, args)
+        meta["desktop_open_started_manual_desktop"] = True
+        meta["desktop_open_recovered_stale_cdp"] = True
+        meta["stale_cdp_error"] = str(exc)
+        meta["manual_desktop_stop"] = stop_note
+        return "\n".join(
+            [
+                "desktop_open_started_manual_desktop=true",
+                "desktop_open_recovered_stale_cdp=true",
+                f"stale_cdp_error: {exc}",
+                f"manual_desktop_stop: {stop_note}",
+                output,
+            ]
+        ), meta
     state_file, text_file = _state_artifacts(root, paths, "desktop-open-state", state)
     meta = metadata(paths)
     meta.update(
         {
             "manual_desktop_active": True,
+            "desktop_open_recovered_stale_cdp": False,
             "current_url": state.get("url"),
             "title": state.get("title"),
             "state_file": str(state_file),

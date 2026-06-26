@@ -2,6 +2,7 @@
 
 ## 0.3.62
 
+- Recovered `desktop_open` from stale manual-desktop Chrome PIDs whose CDP port is no longer reachable by restarting the manual desktop instead of returning a CDP timeout.
 - Added `subscription_text` for `saby_tenders_csv`, allowing the collector to select a Saby subscriptions/sidebar item such as `БПЛА` directly in-page before collecting.
 - Reduced default Saby collector waits for faster scheduled exports: `delay_after_click` now defaults to 350ms, `initial_rows_timeout_ms` to 8000ms, and `row_change_timeout_ms` defaults to 2500ms.
 - Reported Saby subscription-selection diagnostics in collector results and output so slow or missed sidebar selection can be traced.
