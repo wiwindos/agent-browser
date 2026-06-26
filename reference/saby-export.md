@@ -12,6 +12,15 @@ Recommended flow:
 2. Call `saby_tenders_csv profile=saby`.
 3. Send the returned CSV path with `send_file`.
 
+Subscription/sidebar flow:
+
+```text
+action=desktop_open profile=saby url=https://trade.saby.ru/page/tenders-subscriptions
+action=saby_tenders_csv profile=saby mode=yesterday subscription_text=БПЛА
+```
+
+Use `subscription_text` when the left-menu item is known. The collector selects that item through in-page CDP before collection, which avoids slow manual sidebar clicks.
+
 One-call preparation is allowed:
 
 ```text
@@ -38,6 +47,9 @@ Useful options:
 - `mode=visible`: export only visible rows.
 - `target_date=YYYY-MM-DD`: override the target date.
 - `filter_text=...`: keep only rows whose visible text matches the filter.
+- `subscription_text=...`: select a Saby subscriptions/sidebar item before collection, e.g. `БПЛА`.
+- `delay_after_click=...`: tune paging delay; default is 350ms.
+- `row_change_timeout_ms=...`: tune row-change wait after paging/sidebar selection; default is 2500ms.
 - `reset_state=true`: start a fresh run.
 - `keep_manual_browser=true`: keep the manual browser lease after a complete export.
 

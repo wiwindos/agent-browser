@@ -3,6 +3,7 @@ First tool: `skill_agent-browser_browser`.
 Preferred starts:
 - Generic site task: `action=open`, then `action=snapshot`.
 - Saby/SBIS: `profile=saby`, then `action=desktop_open` or `action=saby_tenders_csv`.
+- Saby subscription export: prefer `action=saby_tenders_csv profile=saby subscription_text=<left menu text> mode=yesterday`; do not manually click the sidebar if the text is known.
 - Existing browser artifact path: `action=read_artifact`.
 Snapshot artifact rule:
 - When a browser action returns `snapshot_file`, `state_file`, `text_file`, or any `*_file`, pass that exact file path to `action=read_artifact`.

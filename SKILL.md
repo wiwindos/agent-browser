@@ -17,6 +17,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Protected browser artifacts: use `read_artifact` instead of `read_file` or shell commands.
 - Thread/forum pagination: use `navigate_pagination target=last|next|prev|first` instead of raw `evaluate` when possible.
 - Saby/SBIS export: use `profile=saby`, `desktop_open`, and `saby_tenders_csv`; see `reference/saby-export.md`.
+- Saby/SBIS subscription/sidebar filter: pass `subscription_text=...` to `saby_tenders_csv` so the collector selects the left-menu item in-page instead of slow manual clicking.
 - Downloads or artifact retrieval: use `downloads`; see `reference/artifacts-and-downloads.md`.
 - Busy state, cleanup, or crash recovery: use `status`, `cleanup`, `close`, or `recover`; see `reference/errors-and-recovery.md`.
 
