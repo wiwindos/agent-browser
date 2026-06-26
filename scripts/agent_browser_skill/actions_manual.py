@@ -844,6 +844,24 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
         raise ToolError("read_artifact only allows files inside browser-artifacts")
     if not target.exists():
         raise ToolError(f"artifact file not found: {target}")
+    if target.is_dir():
+        candidates = sorted(
+            (p for p in target.rglob("*") if p.is_file()),
+            key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            reverse=True,
+        )[:5]
+        hints = []
+        if candidates:
+            hints = ["recent_files:"] + [f"- {candidate}" for candidate in candidates]
+        detail = "\n".join(
+            [
+                f"read_artifact requires a file path, not an artifact directory: {target}",
+                "Use the exact snapshot_file/state_file/text_file path returned by the previous browser action.",
+                "Do not use read_file for browser-artifacts.",
+                *hints,
+            ]
+        )
+        raise ToolError(detail)
     if not target.is_file():
         raise ToolError("read_artifact requires a file path, not a directory")
     max_chars = max(100, min(int(args.get("max_chars") or 1200), 3000))
@@ -1022,4 +1040,3 @@ def action_downloads(root: Path, paths: dict[str, Path], args: dict[str, Any]) -
         size = p.stat().st_size if p.exists() else 0
         lines.append(f"{p} ({size} bytes)")
     return "\n".join(lines), meta
-

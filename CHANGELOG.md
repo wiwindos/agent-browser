@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.61
+
+- Added empty-snapshot recovery guidance to `AUTOLOAD.md` and `SKILL.md` so agents read the exact `snapshot_file` artifact before trying desktop fallbacks or screenshots.
+- Added `next_step` and `next_tool_call` hints to empty `open`/`snapshot` results, pointing agents directly at `read_artifact` with the returned file path.
+- Improved `read_artifact` directory errors with actionable guidance and recent file candidates so agents stop passing artifact run directories.
+- Added regression coverage for empty snapshot guidance and artifact-directory misuse.
+
 ## 0.3.60
 
 - Added a dedicated `AUTOLOAD.md` and linked it from `skill.json` so the current agent stack can inject a compact browser-specific prompt instead of falling back to the full `SKILL.md`.
