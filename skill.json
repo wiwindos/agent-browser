@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
   "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, navigate_pagination, downloads, and saby_tenders_csv.",
-  "version": "0.3.62",
+  "version": "0.3.63",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",
@@ -103,7 +103,7 @@
           },
           "path": {
             "type": "string",
-            "description": "For read_artifact: full path to a file inside browser-artifacts."
+            "description": "For read_artifact: full path to a file inside browser-artifacts, or an artifact run directory to auto-read the best text/json artifact."
           },
           "file": {
             "type": "string",

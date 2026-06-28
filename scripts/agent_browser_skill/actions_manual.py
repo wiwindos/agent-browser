@@ -52,6 +52,41 @@ def _artifact_excerpt(path: Path, max_chars: int, mode: str) -> str:
     return text[:max_chars] + "..."
 
 
+def _artifact_directory_candidates(directory: Path) -> list[Path]:
+    readable_suffixes = {".txt", ".json", ".html", ".htm", ".csv", ".md"}
+    files = [
+        path
+        for path in directory.rglob("*")
+        if path.is_file() and path.suffix.lower() in readable_suffixes
+    ]
+
+    def rank(path: Path) -> tuple[int, float]:
+        name = path.name.lower()
+        if "-text" in name or name.endswith("text.txt"):
+            priority = 0
+        elif "snapshot" in name:
+            priority = 1
+        elif "state" in name:
+            priority = 2
+        else:
+            priority = 3
+        return priority, -(path.stat().st_mtime if path.exists() else 0)
+
+    return sorted(files, key=rank)
+
+
+def _resolve_artifact_target(target: Path) -> tuple[Path, Path | None]:
+    if not target.is_dir():
+        return target, None
+    candidates = _artifact_directory_candidates(target)
+    if not candidates:
+        raise ToolError(
+            "read_artifact received an artifact directory, but found no readable text/json/html/csv files: "
+            f"{target}"
+        )
+    return candidates[0], target
+
+
 def action_challenge_detected(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     url = str(args.get("url") or "").strip()
     handoff = str(args.get("handoff") or "manual_desktop").strip().lower()
@@ -865,27 +900,12 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
         raise ToolError("read_artifact only allows files inside browser-artifacts")
     if not target.exists():
         raise ToolError(f"artifact file not found: {target}")
+    original_directory: Path | None = None
     if target.is_dir():
-        candidates = sorted(
-            (p for p in target.rglob("*") if p.is_file()),
-            key=lambda p: p.stat().st_mtime if p.exists() else 0,
-            reverse=True,
-        )[:5]
-        hints = []
-        if candidates:
-            hints = ["recent_files:"] + [f"- {candidate}" for candidate in candidates]
-        detail = "\n".join(
-            [
-                f"read_artifact requires a file path, not an artifact directory: {target}",
-                "Use the exact snapshot_file/state_file/text_file path returned by the previous browser action.",
-                "Do not use read_file for browser-artifacts.",
-                *hints,
-            ]
-        )
-        raise ToolError(detail)
+        target, original_directory = _resolve_artifact_target(target)
     if not target.is_file():
         raise ToolError("read_artifact requires a file path, not a directory")
-    max_chars = max(100, min(int(args.get("max_chars") or 1200), 3000))
+    max_chars = max(100, min(int(args.get("max_chars") or 1200), 12000))
     mode = str(args.get("mode") or "head").strip().lower()
     if mode not in {"head", "tail"}:
         mode = "head"
@@ -899,9 +919,18 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
             "artifact_excerpt_chars": len(excerpt),
         }
     )
-    output = "\n".join(
+    output_lines = ["artifact_read_ok=true"]
+    if original_directory is not None:
+        meta["artifact_directory"] = str(original_directory)
+        meta["artifact_directory_resolved_file"] = str(target)
+        output_lines.extend(
+            [
+                f"artifact_directory: {original_directory}",
+                f"artifact_directory_resolved_file: {target}",
+            ]
+        )
+    output_lines.extend(
         [
-            "artifact_read_ok=true",
             f"artifact_file: {target}",
             f"artifact_mode: {mode}",
             f"artifact_size_bytes: {target.stat().st_size}",
@@ -910,6 +939,7 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
             cap_output(excerpt, 12000),
         ]
     )
+    output = "\n".join(output_lines)
     return output, meta
 
 

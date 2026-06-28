@@ -7,7 +7,7 @@ Preferred starts:
 - Existing browser artifact path: `action=read_artifact`.
 Snapshot artifact rule:
 - When a browser action returns `snapshot_file`, `state_file`, `text_file`, or any `*_file`, pass that exact file path to `action=read_artifact`.
-- Never pass an artifact run directory like `browser-artifacts/<site>/<timestamp>/` to `read_artifact`.
+- Prefer exact `*_file` paths. If only an artifact run directory like `browser-artifacts/<site>/<timestamp>/` is available, pass it to `read_artifact`; it will auto-select a readable artifact.
 Empty snapshot fallback:
 - If `snapshot_ok=true` but `refs_count=0`, `title=(unknown)`, or useful page text is missing, first call `action=read_artifact` on the exact returned `snapshot_file`.
 - If the artifact is still unusable, switch to `action=desktop_open` with the same `profile`/`url`, then `action=desktop_snapshot`.
