@@ -116,10 +116,15 @@ def test_desktop_open_guides_data_extraction_before_screenshot(monkeypatch: pyte
     )
 
     assert "text_file:" in output
-    assert "read text_file with action=read_artifact" in output
+    assert "read the exact text_file with action=read_artifact" in output
     assert "until the requested page data is extracted" in output
-    assert "use screenshot only if explicitly requested" in output
-    assert meta["recommended_next_action"] == "desktop_snapshot"
+    assert "next_tool_call:" in output
+    assert "desktop_screenshot" in output
+    assert "read_file" in output
+    assert "action=run" in output
+    assert meta["recommended_next_action"] == "read_artifact"
+    assert meta["next_tool_call"]["action"] == "read_artifact"
+    assert meta["next_tool_call"]["path"].endswith("desktop-open-state-text.txt")
     assert meta["text_file"].endswith("desktop-open-state-text.txt")
 
 
