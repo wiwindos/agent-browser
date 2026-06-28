@@ -54,6 +54,12 @@ def run_request(request: dict) -> dict:
         args["_context"] = request.get("context") or {}
         action = str(args.get("action") or "").strip()
         if action not in ACTIONS:
+            if action == "send_file":
+                raise ToolError(
+                    "unknown action: send_file. send_file is not an agent-browser action. "
+                    "For textual extraction use action=read_artifact on the returned text_file. "
+                    "For screenshots use action=desktop_screenshot, then send the saved file with the platform file tool outside agent-browser."
+                )
             raise ToolError(f"unknown action: {action}")
         root = workspace_root(request)
         append_tool_log(

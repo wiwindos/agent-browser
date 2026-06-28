@@ -17,6 +17,11 @@ def build_browser_workflow(
     recommended_next_action: str | None = None,
     recommended_next_args: dict[str, Any] | None = None,
     next_tool_call: dict[str, Any] | None = None,
+    required_next_tool_call: dict[str, Any] | None = None,
+    allowed_next_actions: list[str] | None = None,
+    forbidden_next_actions: list[str] | None = None,
+    artifact_policy: dict[str, Any] | None = None,
+    context_policy: dict[str, Any] | None = None,
     external_urls: dict[str, Any] | None = None,
     credentials_to_show_user: dict[str, Any] | None = None,
     constraints: dict[str, Any] | None = None,
@@ -59,6 +64,21 @@ def build_browser_workflow(
         meta["recommended_next_args"] = workflow["recommended_next_args"]
     if "next_tool_call" in workflow:
         meta["next_tool_call"] = workflow["next_tool_call"]
+    if required_next_tool_call:
+        workflow["required_next_tool_call"] = dict(required_next_tool_call)
+        meta["required_next_tool_call"] = workflow["required_next_tool_call"]
+    if allowed_next_actions:
+        workflow["allowed_next_actions"] = list(allowed_next_actions)
+        meta["allowed_next_actions"] = workflow["allowed_next_actions"]
+    if forbidden_next_actions:
+        workflow["forbidden_next_actions"] = list(forbidden_next_actions)
+        meta["forbidden_next_actions"] = workflow["forbidden_next_actions"]
+    if artifact_policy:
+        workflow["artifact_policy"] = dict(artifact_policy)
+        meta["artifact_policy"] = workflow["artifact_policy"]
+    if context_policy:
+        workflow["context_policy"] = dict(context_policy)
+        meta["context_policy"] = workflow["context_policy"]
     if "external_urls" in workflow:
         meta["external_urls"] = workflow["external_urls"]
     if "credentials_to_show_user" in workflow:
