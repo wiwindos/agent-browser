@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.66
+
+- Promoted browser continuation hints into structured workflow metadata, including required next tool calls, allowed/forbidden follow-up actions, artifact policies, and context policies.
+- Made `desktop_open`, `desktop_snapshot`, and `navigate_pagination` require reading the exact returned `text_file` artifact before screenshots, raw evaluate, shell reads, or other fallbacks.
+- Reduced default text-artifact follow-up reads to compact excerpts and added `read_artifact` `query`/`regex` filtering with context lines for date/forum extraction.
+- Added an explanatory `send_file` unknown-action error so agents keep platform file sending outside the browser tool.
+
 ## 0.3.65
 
 - Emitted an explicit `next_tool_call` from `desktop_open` that points to the exact `text_file` artifact, making `read_artifact` the immediate next step for usable pages.
