@@ -15,7 +15,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Manual desktop or classic noVNC: use `manual_desktop` or `desktop_open`; see `reference/manual-desktop-and-novnc.md`.
 - Captcha or Cloudflare handoff: use `challenge_detected`, wait for the user, then `continue_after_manual`; see `reference/manual-desktop-and-novnc.md`.
 - Protected browser artifacts: use `read_artifact` instead of `read_file` or shell commands.
-- Thread/forum pagination: use `navigate_pagination target=last|next|prev|first` instead of raw `evaluate` when possible.
+- Thread/forum pagination: use `navigate_pagination target=last|next|prev|first` instead of raw `evaluate` when possible. For requests like "what was new yesterday", continue navigating/reading until you extract posts dated yesterday; do not stop after only opening the page or sending a screenshot.
 - Saby/SBIS export: use `profile=saby`, `desktop_open`, and `saby_tenders_csv`; see `reference/saby-export.md`.
 - Saby/SBIS subscription/sidebar filter: pass `subscription_text=...` to `saby_tenders_csv` so the collector selects the left-menu item in-page instead of slow manual clicking.
 - Downloads or artifact retrieval: use `downloads`; see `reference/artifacts-and-downloads.md`.
@@ -26,7 +26,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Explicit `agent-browser` request with one concrete site task: load `skill_agent-browser_browser` and call the relevant `action` immediately.
 - Direct Saby export: `desktop_open profile=saby url=...` -> `saby_tenders_csv profile=saby mode=yesterday`.
 - Manual confirmation follow-up after a browser handoff: call `continue_after_manual` on the same `profile` and `url`. Do not require an exact confirmation word.
-- If `snapshot`, `desktop_snapshot`, `desktop_open`, or `evaluate` returns `*_file` paths, use `read_artifact` to inspect the protected full content instead of `read_file`, `run_command`, or large raw `evaluate` dumps.
+- If `snapshot`, `desktop_snapshot`, `desktop_open`, or `evaluate` returns `*_file` paths, use `read_artifact` to inspect the protected full content instead of `read_file`, `run_command`, or large raw `evaluate` dumps. For date-based/forum tasks, follow the exact `next_tool_call`/`text_file` path with `read_artifact`, then use page controls, `navigate_pagination`, or in-page search to locate the requested date before answering.
 - When a manual desktop session is already active for the same profile, generic actions like `open`, `snapshot`, `click`, `fill`, and `wait` should stay on the live desktop session instead of starting a second Chrome daemon.
 
 ## Hard Rules
@@ -40,8 +40,8 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - If the tool output already contains `next_step:` or `next_tool_call`, follow that directly instead of searching for more tools or reading local skill files.
 - Do not use `read_file` or shell tools to open files under `browser-artifacts/`; use `read_artifact`.
 - Prefer exact file paths with `read_artifact`, especially returned `snapshot_file`, `state_file`, `text_file`, or another `*_file`. If only an artifact run directory is available, pass it to `read_artifact`; the tool will auto-select the best readable text/json artifact.
-- Do not use `screenshot` as the first recovery step for an empty snapshot.
-- Do not use large raw `evaluate` dumps for page text or HTML if `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
+- Do not use `screenshot` as the first recovery step for an empty snapshot, and do not substitute a screenshot for requested textual extraction unless the user explicitly asked for an image or visual proof.
+- Do not use raw `fetch_page`, `action=run`, or large raw `evaluate` dumps for page text or HTML if `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
 
 ## References
 

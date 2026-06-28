@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.65
+
+- Emitted an explicit `next_tool_call` from `desktop_open` that points to the exact `text_file` artifact, making `read_artifact` the immediate next step for usable pages.
+- Marked screenshots, protected-path shell reads, raw fetches, large raw evaluate calls, and `action=run` as non-substitutes for text extraction in forum/date flows.
+
+## 0.3.64
+
+- Tightened forum/date extraction guidance so agents continue navigating and reading dated posts/items instead of stopping after `desktop_open` or a screenshot.
+- Updated `desktop_open` next-step guidance to read the exact `text_file` artifact and keep using pagination or site controls until the requested data is extracted.
+
 ## 0.3.63
 
 - Made `read_artifact` resilient to artifact run directories by automatically selecting the best readable text/json/html/csv artifact, preferring page text files over snapshots and state files.

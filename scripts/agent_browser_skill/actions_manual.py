@@ -830,27 +830,37 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
     current_url = str(state.get("url") or url).strip()
     if current_url:
         continue_args["url"] = current_url
+    read_text_call = {"action": "read_artifact", "path": str(text_file), "max_chars": 12000}
     meta.update(
         build_browser_workflow(
             state="awaiting_user_completion" if challenge_detected else "page_ready",
             user_action_required=bool(challenge_detected),
-            recommended_next_action="continue_after_manual" if challenge_detected else "desktop_snapshot",
-            recommended_next_args=continue_args if challenge_detected else {"profile": paths["site"].name},
+            recommended_next_action="continue_after_manual" if challenge_detected else "read_artifact",
+            recommended_next_args=continue_args if challenge_detected else {"path": str(text_file), "max_chars": 12000},
             next_tool_call={"action": "continue_after_manual", **continue_args}
             if challenge_detected
-            else {"action": "desktop_snapshot", "profile": paths["site"].name},
+            else read_text_call,
             user_message_hint=(
                 "Only wait for the user if the newly opened page still needs manual interaction."
                 if challenge_detected
-                else "The page is already usable. Continue with browser actions."
+                else "Read the exact text_file artifact before screenshots, raw evaluate, or other fallbacks."
             ),
         )
     )
     output = "\n".join(
         _state_summary_lines("desktop_opened", state, state_file, text_file, challenge_detected)
-        + [
-            f"next_step: {'wait for the user and then call continue_after_manual' if challenge_detected else 'continue with action=desktop_snapshot or action=saby_tenders_csv as needed'}",
-        ]
+        + (
+            [
+                "next_step: wait for the user and then call continue_after_manual",
+                "next_tool_call: " + json.dumps({"action": "continue_after_manual", **continue_args}, ensure_ascii=False),
+            ]
+            if challenge_detected
+            else [
+                "next_step: read the exact text_file with action=read_artifact before screenshots, raw evaluate, or other fallbacks; then continue with desktop_snapshot, navigate_pagination, or site controls until the requested page data is extracted",
+                "next_tool_call: " + json.dumps(read_text_call, ensure_ascii=False),
+                "do_not_use_for_text_extraction: desktop_screenshot, read_file, run_command, raw fetch_page, large raw evaluate, action=run",
+            ]
+        )
     )
     return output, meta
 
