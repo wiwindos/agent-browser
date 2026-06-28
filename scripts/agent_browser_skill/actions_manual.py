@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,73 @@ def _browser_state_output(prefix: str, state: dict[str, Any], state_file: Path, 
     return "\n".join(_state_summary_lines(prefix, state, state_file, text_file, challenge))
 
 
+TEXT_EXTRACTION_FORBIDDEN_ACTIONS = [
+    "desktop_screenshot",
+    "screenshot",
+    "evaluate",
+    "run",
+    "read_file",
+    "run_command",
+    "fetch_page",
+]
+
+
+TEXT_ARTIFACT_POLICY = {
+    "prefer_exact_file": True,
+    "avoid_directory_unless_no_file_returned": True,
+    "max_chars_default": 3000,
+    "max_chars_hard": 12000,
+}
+
+
+TEXT_CONTEXT_POLICY = {
+    "avoid_repeating_same_artifact": True,
+    "use_query_or_regex_for_dates": True,
+    "summarize_before_next_large_read": True,
+}
+
+
+def _text_artifact_workflow(
+    *,
+    text_file: Path,
+    page_kind: str = "generic_page",
+    max_chars: int = 3000,
+    user_message_hint: str | None = None,
+) -> dict[str, Any]:
+    read_text_call = {"action": "read_artifact", "path": str(text_file), "max_chars": max_chars}
+    meta = build_browser_workflow(
+        state="page_ready",
+        user_action_required=False,
+        recommended_next_action="read_artifact",
+        recommended_next_args={"path": str(text_file), "max_chars": max_chars},
+        next_tool_call=read_text_call,
+        required_next_tool_call=read_text_call,
+        allowed_next_actions=["read_artifact", "navigate_pagination", "desktop_snapshot", "wait"],
+        forbidden_next_actions=TEXT_EXTRACTION_FORBIDDEN_ACTIONS,
+        artifact_policy=TEXT_ARTIFACT_POLICY,
+        context_policy=TEXT_CONTEXT_POLICY,
+        constraints={
+            "must_read_exact_text_file_first": True,
+            "do_not_use_screenshot_for_text": True,
+            "do_not_use_large_raw_evaluate": True,
+        },
+        user_message_hint=user_message_hint
+        or "Read the exact text_file artifact before screenshots, raw evaluate, shell commands, or other fallbacks.",
+    )
+    meta["page_kind"] = page_kind
+    if page_kind == "forum_thread":
+        meta["recommended_followup_after_read"] = {"action": "navigate_pagination", "target": "last"}
+        meta["browser_workflow"]["recommended_followup_after_read"] = meta["recommended_followup_after_read"]
+    return meta
+
+
+def _page_kind(url: Any, title: Any = "", text: Any = "") -> str:
+    haystack = " ".join(str(part or "").lower() for part in (url, title, text[:1000] if isinstance(text, str) else text))
+    if "showtopic=" in haystack or "/forum" in haystack or "forum" in haystack:
+        return "forum_thread"
+    return "generic_page"
+
+
 def _artifact_excerpt(path: Path, max_chars: int, mode: str) -> str:
     text = path.read_text(encoding="utf-8", errors="replace")
     if len(text) <= max_chars:
@@ -50,6 +118,47 @@ def _artifact_excerpt(path: Path, max_chars: int, mode: str) -> str:
     if mode == "tail":
         return "..." + text[-max_chars:]
     return text[:max_chars] + "..."
+
+
+def _artifact_search_excerpt(path: Path, query: str = "", regex: str = "", context_lines: int = 3, max_chars: int = 12000) -> tuple[str, dict[str, Any]]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines()
+    matches: list[tuple[int, str]] = []
+    if regex:
+        pattern = re.compile(regex, re.IGNORECASE)
+        for idx, line in enumerate(lines):
+            if pattern.search(line):
+                matches.append((idx, line))
+    else:
+        needle = query.lower()
+        for idx, line in enumerate(lines):
+            if needle in line.lower():
+                matches.append((idx, line))
+
+    if not matches:
+        return "", {"artifact_filter_matches": 0}
+
+    selected: list[str] = []
+    seen: set[int] = set()
+    for idx, _line in matches:
+        start = max(0, idx - context_lines)
+        end = min(len(lines), idx + context_lines + 1)
+        if selected:
+            selected.append("---")
+        for line_no in range(start, end):
+            if line_no in seen:
+                continue
+            seen.add(line_no)
+            selected.append(f"{line_no + 1}: {lines[line_no]}")
+        if len("\n".join(selected)) >= max_chars:
+            break
+    excerpt = "\n".join(selected)
+    if len(excerpt) > max_chars:
+        excerpt = excerpt[:max_chars] + "\n...[truncated by agent-browser skill]"
+    return excerpt, {
+        "artifact_filter_matches": len(matches),
+        "artifact_filter_context_lines": context_lines,
+    }
 
 
 def _artifact_directory_candidates(directory: Path) -> list[Path]:
@@ -830,20 +939,22 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
     current_url = str(state.get("url") or url).strip()
     if current_url:
         continue_args["url"] = current_url
-    read_text_call = {"action": "read_artifact", "path": str(text_file), "max_chars": 12000}
     meta.update(
         build_browser_workflow(
-            state="awaiting_user_completion" if challenge_detected else "page_ready",
-            user_action_required=bool(challenge_detected),
-            recommended_next_action="continue_after_manual" if challenge_detected else "read_artifact",
-            recommended_next_args=continue_args if challenge_detected else {"path": str(text_file), "max_chars": 12000},
-            next_tool_call={"action": "continue_after_manual", **continue_args}
-            if challenge_detected
-            else read_text_call,
+            state="awaiting_user_completion",
+            user_action_required=True,
+            recommended_next_action="continue_after_manual",
+            recommended_next_args=continue_args,
+            next_tool_call={"action": "continue_after_manual", **continue_args},
+            user_message_hint="Only wait for the user if the newly opened page still needs manual interaction.",
+        )
+        if challenge_detected
+        else _text_artifact_workflow(
+            text_file=text_file,
+            page_kind=_page_kind(state.get("url") or url, state.get("title"), state.get("text")),
             user_message_hint=(
-                "Only wait for the user if the newly opened page still needs manual interaction."
-                if challenge_detected
-                else "Read the exact text_file artifact before screenshots, raw evaluate, or other fallbacks."
+                "Read the exact text_file artifact before screenshots, raw evaluate, or other fallbacks; "
+                "for forum pages, then use navigate_pagination or site controls until the requested page data is extracted."
             ),
         )
     )
@@ -857,7 +968,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
             if challenge_detected
             else [
                 "next_step: read the exact text_file with action=read_artifact before screenshots, raw evaluate, or other fallbacks; then continue with desktop_snapshot, navigate_pagination, or site controls until the requested page data is extracted",
-                "next_tool_call: " + json.dumps(read_text_call, ensure_ascii=False),
+                "next_tool_call: " + json.dumps({"action": "read_artifact", "path": str(text_file), "max_chars": 3000}, ensure_ascii=False),
                 "do_not_use_for_text_extraction: desktop_screenshot, read_file, run_command, raw fetch_page, large raw evaluate, action=run",
             ]
         )
@@ -882,6 +993,14 @@ def action_desktop_snapshot(root: Path, paths: dict[str, Path], args: dict[str, 
             "text_file": str(text_file),
         }
     )
+    if not challenge:
+        meta.update(
+            _text_artifact_workflow(
+                text_file=text_file,
+                page_kind=_page_kind(state.get("url"), state.get("title"), state.get("text")),
+                user_message_hint="Read the exact desktop_snapshot text_file before screenshots, raw evaluate, or shell fallbacks.",
+            )
+        )
     output = "\n".join(_state_summary_lines("desktop_snapshot", state, state_file, text_file, challenge))
     return output, meta
 
@@ -919,7 +1038,26 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
     mode = str(args.get("mode") or "head").strip().lower()
     if mode not in {"head", "tail"}:
         mode = "head"
-    excerpt = _artifact_excerpt(target, max_chars, mode)
+    query = str(args.get("query") or "").strip()
+    regex = str(args.get("regex") or "").strip()
+    context_lines = max(0, min(int(args.get("context_lines") or 3), 20))
+    filter_meta: dict[str, Any] = {}
+    if query or regex:
+        try:
+            excerpt, filter_meta = _artifact_search_excerpt(
+                target,
+                query=query,
+                regex=regex,
+                context_lines=context_lines,
+                max_chars=max_chars,
+            )
+        except re.error as exc:
+            raise ToolError(f"invalid read_artifact regex: {exc}") from exc
+        mode = "filter"
+        if not excerpt:
+            excerpt = f"No matches found for {'regex' if regex else 'query'}: {regex or query}"
+    else:
+        excerpt = _artifact_excerpt(target, max_chars, mode)
     meta = metadata(paths)
     meta.update(
         {
@@ -927,6 +1065,9 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
             "artifact_size_bytes": target.stat().st_size,
             "artifact_mode": mode,
             "artifact_excerpt_chars": len(excerpt),
+            "artifact_query": query or None,
+            "artifact_regex": regex or None,
+            **filter_meta,
         }
     )
     output_lines = ["artifact_read_ok=true"]
@@ -945,6 +1086,7 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
             f"artifact_mode: {mode}",
             f"artifact_size_bytes: {target.stat().st_size}",
             f"artifact_excerpt_chars: {len(excerpt)}",
+            *( [f"artifact_filter: {'regex' if regex else 'query'}={regex or query}", f"artifact_filter_matches: {filter_meta.get('artifact_filter_matches', 0)}"] if query or regex else [] ),
             "",
             cap_output(excerpt, 12000),
         ]
@@ -1026,6 +1168,15 @@ def action_navigate_pagination(root: Path, paths: dict[str, Path], args: dict[st
             "text_file": str(text_file),
         }
     )
+    if not challenge:
+        meta.update(
+            _text_artifact_workflow(
+                text_file=text_file,
+                page_kind=_page_kind(state.get("url"), state.get("title"), state.get("text")),
+                max_chars=6000,
+                user_message_hint="Read the exact pagination text_file before deciding whether to navigate again or answer.",
+            )
+        )
     output = "\n".join(
         [
             f"navigate_pagination_ok=true",
@@ -1033,6 +1184,15 @@ def action_navigate_pagination(root: Path, paths: dict[str, Path], args: dict[st
             f"pagination_reason: {info.get('reason')}",
             f"pagination_text: {info.get('text')}",
             *_state_summary_lines("desktop_snapshot", state, state_file, text_file, challenge),
+            *(
+                [
+                    "next_step: read the exact text_file with action=read_artifact before further navigation or answering",
+                    "next_tool_call: "
+                    + json.dumps({"action": "read_artifact", "path": str(text_file), "max_chars": 6000}, ensure_ascii=False),
+                ]
+                if not challenge
+                else []
+            ),
         ]
     )
     return output, meta

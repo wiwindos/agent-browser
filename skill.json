@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
   "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, navigate_pagination, downloads, and saby_tenders_csv.",
-  "version": "0.3.65",
+  "version": "0.3.66",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",
@@ -302,6 +302,18 @@
           "live_check_seconds": {
             "type": "integer",
             "description": "For challenge_detected with manual_desktop: seconds to poll the live desktop before asking the user for manual captcha work. Defaults to 10, max 30."
+          },
+          "query": {
+            "type": "string",
+            "description": "For read_artifact: literal text to search for in the artifact and return matching context instead of a head/tail excerpt."
+          },
+          "regex": {
+            "type": "string",
+            "description": "For read_artifact: regular expression to search for in the artifact and return matching context instead of a head/tail excerpt."
+          },
+          "context_lines": {
+            "type": "integer",
+            "description": "For read_artifact query/regex: number of surrounding lines to include around each match. Defaults to 3, max 20."
           }
         },
         "required": [
