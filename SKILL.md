@@ -39,8 +39,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - If `agent_browser_busy=true` or `manual_browser_busy=true`, do not start a second browser flow through shell commands.
 - If the tool output already contains `next_step:` or `next_tool_call`, follow that directly instead of searching for more tools or reading local skill files.
 - Do not use `read_file` or shell tools to open files under `browser-artifacts/`; use `read_artifact`.
-- `read_artifact` requires a file path. Do not pass a directory path.
-- Never pass an artifact run directory to `read_artifact`; pass the exact file path returned as `snapshot_file`, `state_file`, `text_file`, or another `*_file`.
+- Prefer exact file paths with `read_artifact`, especially returned `snapshot_file`, `state_file`, `text_file`, or another `*_file`. If only an artifact run directory is available, pass it to `read_artifact`; the tool will auto-select the best readable text/json artifact.
 - Do not use `screenshot` as the first recovery step for an empty snapshot.
 - Do not use large raw `evaluate` dumps for page text or HTML if `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
 
