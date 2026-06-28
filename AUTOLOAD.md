@@ -17,6 +17,7 @@ Forum/date extraction:
 - If the user asks what was new yesterday/on a specific date, keep navigating and reading artifacts until you extract dated posts/items for that date; do not answer with only "opened the page" or a screenshot.
 - After `desktop_open`/`desktop_snapshot`, follow the exact `next_tool_call`/`text_file` path with `read_artifact`, then use `navigate_pagination`, links/buttons, or in-page search to reach the relevant date. Do not use screenshots, `read_file`, `run_command`, raw `fetch_page`, large raw `evaluate`, or `action=run` as substitutes for extracting page text.
 - For date/forum searches, use `read_artifact query=<date>` or `read_artifact regex=<pattern> context_lines=<n>` instead of repeatedly reading large excerpts.
+- If the exact `text_file` path has fallen out of context, use `smart_read` or `find_text`; they continue from the active browser workflow state.
 Hard rules:
 - Do not use shell commands for browser work.
 - Do not use `read_file` on `browser-artifacts/`; use `read_artifact`.
