@@ -29,10 +29,12 @@ from agent_browser_skill.actions_manual import (
     action_desktop_snapshot,
     action_downloads,
     action_evaluate,
+    action_find_text,
     action_manual_desktop,
     action_navigate_pagination,
     action_read_artifact,
     action_share_session,
+    action_smart_read,
     action_stop_desktop,
 )
 from agent_browser_skill.actions_saby import action_saby_tenders_csv
@@ -57,6 +59,8 @@ ACTIONS = {
     "desktop_screenshot": action_desktop_screenshot,
     "evaluate": action_evaluate,
     "read_artifact": action_read_artifact,
+    "smart_read": action_smart_read,
+    "find_text": action_find_text,
     "navigate_pagination": action_navigate_pagination,
     "downloads": action_downloads,
     "saby_tenders_csv": action_saby_tenders_csv,

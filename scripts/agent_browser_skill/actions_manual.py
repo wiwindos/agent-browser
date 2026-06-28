@@ -9,12 +9,20 @@ from typing import Any
 
 from agent_browser_skill.actions_generic import action_open
 from agent_browser_skill.browser import cdp, dashboard, desktop
-from agent_browser_skill.core.args import timeout_from
+from agent_browser_skill.core.args import bool_arg, timeout_from
 from agent_browser_skill.core.artifacts import artifact_download_files
 from agent_browser_skill.core.output import cap_output, metadata
 from agent_browser_skill.core.paths import ensure_inside, remember_url, remembered_url
 from agent_browser_skill.core.snapshot_artifacts import compact_excerpt, write_json_artifact, write_text_artifact
-from agent_browser_skill.core.workflow import build_browser_workflow
+from agent_browser_skill.core.workflow import (
+    build_browser_workflow,
+    duplicate_read_guard,
+    load_workflow_state,
+    mark_text_artifact_read,
+    pending_text_read,
+    remember_pending_text_read,
+    text_workflow_guard_response,
+)
 from agent_browser_skill.errors import ToolError
 from agent_browser_skill.runtime import dependencies as runtime_deps
 from agent_browser_skill.runtime import process as process_runtime
@@ -102,6 +110,26 @@ def _text_artifact_workflow(
         meta["recommended_followup_after_read"] = {"action": "navigate_pagination", "target": "last"}
         meta["browser_workflow"]["recommended_followup_after_read"] = meta["recommended_followup_after_read"]
     return meta
+
+
+def _remember_text_workflow(
+    root: Path,
+    paths: dict[str, Path],
+    *,
+    text_file: Path,
+    state: dict[str, Any],
+    page_kind: str,
+    max_chars: int = 3000,
+) -> None:
+    remember_pending_text_read(
+        root,
+        paths,
+        text_file=text_file,
+        current_url=state.get("url"),
+        title=state.get("title"),
+        page_kind=page_kind,
+        max_chars=max_chars,
+    )
 
 
 def _page_kind(url: Any, title: Any = "", text: Any = "") -> str:
@@ -939,6 +967,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
     current_url = str(state.get("url") or url).strip()
     if current_url:
         continue_args["url"] = current_url
+    page_kind = _page_kind(state.get("url") or url, state.get("title"), state.get("text"))
     meta.update(
         build_browser_workflow(
             state="awaiting_user_completion",
@@ -951,13 +980,15 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
         if challenge_detected
         else _text_artifact_workflow(
             text_file=text_file,
-            page_kind=_page_kind(state.get("url") or url, state.get("title"), state.get("text")),
+            page_kind=page_kind,
             user_message_hint=(
                 "Read the exact text_file artifact before screenshots, raw evaluate, or other fallbacks; "
                 "for forum pages, then use navigate_pagination or site controls until the requested page data is extracted."
             ),
         )
     )
+    if not challenge_detected:
+        _remember_text_workflow(root, paths, text_file=text_file, state=state, page_kind=page_kind, max_chars=3000)
     output = "\n".join(
         _state_summary_lines("desktop_opened", state, state_file, text_file, challenge_detected)
         + (
@@ -993,14 +1024,16 @@ def action_desktop_snapshot(root: Path, paths: dict[str, Path], args: dict[str, 
             "text_file": str(text_file),
         }
     )
+    page_kind = _page_kind(state.get("url"), state.get("title"), state.get("text"))
     if not challenge:
         meta.update(
             _text_artifact_workflow(
                 text_file=text_file,
-                page_kind=_page_kind(state.get("url"), state.get("title"), state.get("text")),
+                page_kind=page_kind,
                 user_message_hint="Read the exact desktop_snapshot text_file before screenshots, raw evaluate, or shell fallbacks.",
             )
         )
+        _remember_text_workflow(root, paths, text_file=text_file, state=state, page_kind=page_kind, max_chars=3000)
     output = "\n".join(_state_summary_lines("desktop_snapshot", state, state_file, text_file, challenge))
     return output, meta
 
@@ -1008,6 +1041,15 @@ def action_desktop_snapshot(root: Path, paths: dict[str, Path], args: dict[str, 
 def action_desktop_screenshot(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not desktop.manual_desktop_running(root):
         raise ToolError("manual desktop is not running; call manual_desktop or challenge_detected first")
+    if not bool_arg(args, "force", False):
+        guarded = text_workflow_guard_response(
+            root,
+            paths,
+            attempted_action="desktop_screenshot",
+            reason="pending text_file must be read before using screenshots for a textual browser task",
+        )
+        if guarded:
+            return guarded
     target = desktop.screenshot_path(root, paths, args)
     result = cdp.cdp_call(desktop.desktop_cdp_port_from(args), "Page.captureScreenshot", {"format": "png", "fromSurface": True})
     data = result.get("data")
@@ -1058,6 +1100,29 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
             excerpt = f"No matches found for {'regex' if regex else 'query'}: {regex or query}"
     else:
         excerpt = _artifact_excerpt(target, max_chars, mode)
+    duplicate_guard = duplicate_read_guard(
+        root,
+        paths,
+        artifact_file=target,
+        mode=mode,
+        query=query,
+        regex=regex,
+    )
+    if duplicate_guard:
+        meta = metadata(paths)
+        meta.update(duplicate_guard)
+        output = "\n".join(
+            [
+                "duplicate_artifact_read_deferred=true",
+                f"artifact_file: {target}",
+                f"artifact_mode: {mode}",
+                f"duplicate_read_count: {duplicate_guard['duplicate_read_count']}",
+                "next_step: avoid rereading the same large artifact; use query/regex or navigate pagination",
+                "next_tool_call: " + json.dumps(duplicate_guard["next_tool_call"], ensure_ascii=False),
+            ]
+        )
+        return output, meta
+    mark_text_artifact_read(root, paths, target)
     meta = metadata(paths)
     meta.update(
         {
@@ -1092,6 +1157,34 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
         ]
     )
     output = "\n".join(output_lines)
+    return output, meta
+
+
+def action_smart_read(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    read_args = dict(args)
+    read_args["action"] = "read_artifact"
+    if not str(read_args.get("path") or read_args.get("file") or "").strip():
+        workflow = pending_text_read(root, paths) or load_workflow_state(root, paths)
+        text_file = str(workflow.get("last_text_file") or "").strip()
+        if not text_file:
+            raise ToolError("smart_read needs a path or an active page text_file from desktop_open/desktop_snapshot")
+        read_args["path"] = text_file
+    output, meta = action_read_artifact(root, paths, read_args)
+    meta["smart_read_used"] = True
+    output = "smart_read_ok=true\n" + output
+    return output, meta
+
+
+def action_find_text(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    find_args = dict(args)
+    find_args["action"] = "read_artifact"
+    if not str(find_args.get("query") or find_args.get("regex") or "").strip():
+        raise ToolError("find_text requires query or regex")
+    if "context_lines" not in find_args:
+        find_args["context_lines"] = 5
+    output, meta = action_smart_read(root, paths, find_args)
+    meta["find_text_used"] = True
+    output = "find_text_ok=true\n" + output
     return output, meta
 
 
@@ -1204,6 +1297,16 @@ def action_evaluate(root: Path, paths: dict[str, Path], args: dict[str, Any]) ->
         raise ToolError("script is required for evaluate")
     if not desktop.manual_desktop_running(root):
         raise ToolError("manual desktop is not running; call login/manual_desktop first, then evaluate")
+    text_like = any(token in script for token in ("innerText", "textContent", "outerHTML", "document.body", "substring("))
+    if text_like and not bool_arg(args, "force", False):
+        guarded = text_workflow_guard_response(
+            root,
+            paths,
+            attempted_action="evaluate",
+            reason="pending text_file must be read before raw DOM text extraction",
+        )
+        if guarded:
+            return guarded
     before_downloads = set(paths["downloads"].glob("*")) if paths["downloads"].exists() else set()
     value = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script)
     time.sleep(1.0)
