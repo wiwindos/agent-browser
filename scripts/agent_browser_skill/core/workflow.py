@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 
@@ -86,3 +88,140 @@ def build_browser_workflow(
     if "user_message_hint" in workflow:
         meta["user_message_hint"] = workflow["user_message_hint"]
     return meta
+
+
+def workflow_state_file(root: Path, site: str) -> Path:
+    path = root / ".agent-browser" / "workflow-state" / f"{site}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def load_workflow_state(root: Path, paths: dict[str, Path]) -> dict[str, Any]:
+    path = workflow_state_file(root, paths["site"].name)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_workflow_state(root: Path, paths: dict[str, Path], state: dict[str, Any]) -> None:
+    path = workflow_state_file(root, paths["site"].name)
+    payload = dict(state)
+    payload["site_key"] = paths["site"].name
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def remember_pending_text_read(
+    root: Path,
+    paths: dict[str, Path],
+    *,
+    text_file: Path,
+    current_url: Any = None,
+    title: Any = None,
+    page_kind: str = "generic_page",
+    max_chars: int = 3000,
+) -> dict[str, Any]:
+    state = load_workflow_state(root, paths)
+    read_call = {"action": "read_artifact", "path": str(text_file), "max_chars": max_chars}
+    state.update(
+        {
+            "workflow_state": "needs_text_read",
+            "pending_next_action": "read_artifact",
+            "pending_next_tool_call": read_call,
+            "last_text_file": str(text_file),
+            "last_url": str(current_url or ""),
+            "last_title": str(title or ""),
+            "page_kind": page_kind,
+            "text_artifact_read": False,
+        }
+    )
+    state.setdefault("artifact_reads", {})
+    save_workflow_state(root, paths, state)
+    return state
+
+
+def mark_text_artifact_read(root: Path, paths: dict[str, Path], text_file: Path) -> None:
+    state = load_workflow_state(root, paths)
+    if str(text_file) == str(state.get("last_text_file") or ""):
+        state["text_artifact_read"] = True
+        state["workflow_state"] = "text_read"
+        state.pop("pending_next_action", None)
+        state.pop("pending_next_tool_call", None)
+        save_workflow_state(root, paths, state)
+
+
+def pending_text_read(root: Path, paths: dict[str, Path]) -> dict[str, Any] | None:
+    state = load_workflow_state(root, paths)
+    pending = state.get("pending_next_tool_call")
+    if state.get("workflow_state") == "needs_text_read" and state.get("text_artifact_read") is False and isinstance(pending, dict):
+        return state
+    return None
+
+
+def duplicate_read_guard(
+    root: Path,
+    paths: dict[str, Path],
+    *,
+    artifact_file: Path,
+    mode: str,
+    query: str = "",
+    regex: str = "",
+) -> dict[str, Any] | None:
+    if query or regex:
+        return None
+    state = load_workflow_state(root, paths)
+    reads = state.setdefault("artifact_reads", {})
+    key = f"{artifact_file}|{mode}|{query}|{regex}"
+    count = int(reads.get(key) or 0) + 1
+    reads[key] = count
+    save_workflow_state(root, paths, state)
+    if count <= 1:
+        return None
+    next_call = None
+    if state.get("page_kind") == "forum_thread":
+        next_call = {"action": "navigate_pagination", "target": "last"}
+    return {
+        "duplicate_read_detected": True,
+        "duplicate_read_count": count,
+        "recommended_next_action": "navigate_pagination" if next_call else "read_artifact",
+        "next_tool_call": next_call
+        or {"action": "read_artifact", "path": str(artifact_file), "query": "<target text/date>", "context_lines": 5},
+    }
+
+
+def text_workflow_guard_response(
+    root: Path,
+    paths: dict[str, Path],
+    *,
+    attempted_action: str,
+    reason: str,
+) -> tuple[str, dict[str, Any]] | None:
+    state = pending_text_read(root, paths)
+    if not state:
+        return None
+    next_call = dict(state["pending_next_tool_call"])
+    meta = {
+        "workflow_state": "blocked_until_text_read",
+        "attempted_action": attempted_action,
+        "guard_reason": reason,
+        "recommended_next_action": next_call.get("action"),
+        "next_tool_call": next_call,
+        "required_next_tool_call": next_call,
+        "last_text_file": state.get("last_text_file"),
+        "page_kind": state.get("page_kind"),
+        "constraints": {
+            "must_read_exact_text_file_first": True,
+            "do_not_use_screenshot_for_text": True,
+            "do_not_use_large_raw_evaluate": True,
+        },
+    }
+    output = "\n".join(
+        [
+            f"{attempted_action}_deferred=true",
+            f"guard_reason: {reason}",
+            "next_step: read the pending exact text_file before screenshots, raw evaluate, or other fallbacks",
+            "required_next_tool_call: " + json.dumps(next_call, ensure_ascii=False),
+        ]
+    )
+    return output, meta

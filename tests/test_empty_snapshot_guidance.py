@@ -14,9 +14,13 @@ if str(SCRIPTS) not in sys.path:
 from agent_browser_skill.actions_generic import action_snapshot
 from agent_browser_skill.actions_manual import (
     action_desktop_open,
+    action_desktop_screenshot,
     action_desktop_snapshot,
+    action_evaluate,
+    action_find_text,
     action_navigate_pagination,
     action_read_artifact,
+    action_smart_read,
 )
 from agent_browser_skill.core.config import LOCKLESS_ACTIONS
 from agent_browser_skill.core.artifacts import cleanup_note
@@ -229,6 +233,98 @@ def test_read_artifact_query_returns_matching_context(tmp_path: Path) -> None:
     assert "next line" in output
     assert meta["artifact_mode"] == "filter"
     assert meta["artifact_filter_matches"] == 1
+
+
+def test_desktop_screenshot_deferred_until_pending_text_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.desktop_navigate", lambda args, url: None)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.desktop.desktop_page_state",
+        lambda args: {"url": "https://example.com/forum", "title": "Forum", "htmlLength": 123, "text": "Forum post text"},
+    )
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
+
+    action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
+    output, meta = action_desktop_screenshot(tmp_path, paths, {"action": "desktop_screenshot", "profile": "example"})
+
+    assert "desktop_screenshot_deferred=true" in output
+    assert meta["workflow_state"] == "blocked_until_text_read"
+    assert meta["required_next_tool_call"]["action"] == "read_artifact"
+    assert meta["required_next_tool_call"]["path"].endswith("desktop-open-state-text.txt")
+
+
+def test_text_like_evaluate_deferred_until_pending_text_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.desktop_navigate", lambda args, url: None)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.desktop.desktop_page_state",
+        lambda args: {"url": "https://example.com/forum", "title": "Forum", "htmlLength": 123, "text": "Forum post text"},
+    )
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
+
+    action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
+    output, meta = action_evaluate(
+        tmp_path,
+        paths,
+        {"action": "evaluate", "profile": "example", "code": "document.body.innerText"},
+    )
+
+    assert "evaluate_deferred=true" in output
+    assert meta["required_next_tool_call"]["action"] == "read_artifact"
+
+
+def test_smart_read_and_find_text_use_pending_text_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.desktop_navigate", lambda args, url: None)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.desktop.desktop_page_state",
+        lambda args: {
+            "url": "https://example.com/forum",
+            "title": "Forum",
+            "htmlLength": 123,
+            "text": "26.06.26 old\n27.06.26 target post\n",
+        },
+    )
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
+
+    action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
+    output, meta = action_find_text(
+        tmp_path,
+        paths,
+        {"action": "find_text", "profile": "example", "query": "27.06.26"},
+    )
+
+    assert "find_text_ok=true" in output
+    assert "27.06.26 target post" in output
+    assert meta["find_text_used"] is True
+    assert meta["artifact_filter_matches"] == 1
+
+    output, meta = action_smart_read(tmp_path, paths, {"action": "smart_read", "profile": "example", "mode": "tail"})
+    assert "smart_read_ok=true" in output
+    assert meta["smart_read_used"] is True
+
+
+def test_duplicate_read_artifact_is_deferred_after_first_large_read(tmp_path: Path) -> None:
+    paths = _paths(tmp_path, "read_artifact")
+    text_file = paths["logs"] / "posts.txt"
+    text_file.parent.mkdir(parents=True, exist_ok=True)
+    text_file.write_text("same text\n" * 20, encoding="utf-8")
+
+    first, _meta = action_read_artifact(tmp_path, paths, {"action": "read_artifact", "path": str(text_file)})
+    second, meta = action_read_artifact(tmp_path, paths, {"action": "read_artifact", "path": str(text_file)})
+
+    assert "artifact_read_ok=true" in first
+    assert "duplicate_artifact_read_deferred=true" in second
+    assert meta["duplicate_read_detected"] is True
 
 
 def test_unknown_send_file_action_explains_platform_boundary(tmp_path: Path) -> None:

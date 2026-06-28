@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.67
+
+- Added per-profile browser workflow state so `desktop_open`/`desktop_snapshot` remember the pending exact `text_file` read across subsequent actions.
+- Deferred `desktop_screenshot` and text-like raw `evaluate` calls until the pending text artifact is read, unless callers pass `force=true`.
+- Added duplicate `read_artifact` suppression for repeated non-query reads of the same artifact, steering agents toward `query`/`regex` or pagination instead of bloating context.
+- Added `smart_read` and `find_text` continuation actions that reuse the active workflow `text_file` when the exact artifact path has fallen out of model context.
+
 ## 0.3.66
 
 - Promoted browser continuation hints into structured workflow metadata, including required next tool calls, allowed/forbidden follow-up actions, artifact policies, and context policies.
