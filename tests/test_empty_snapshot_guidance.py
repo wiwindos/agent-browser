@@ -93,6 +93,36 @@ def test_saby_subscription_text_is_preserved_in_options_and_resume_call() -> Non
     assert next_tool_call["filter_text"] == "дрон"
 
 
+def test_desktop_open_guides_data_extraction_before_screenshot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.desktop_navigate", lambda args, url: None)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.desktop.desktop_page_state",
+        lambda args: {
+            "url": "https://example.com/forum",
+            "title": "Forum",
+            "htmlLength": 123,
+            "text": "Forum post text",
+        },
+    )
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
+
+    output, meta = action_desktop_open(
+        tmp_path,
+        paths,
+        {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"},
+    )
+
+    assert "text_file:" in output
+    assert "read text_file with action=read_artifact" in output
+    assert "until the requested page data is extracted" in output
+    assert "use screenshot only if explicitly requested" in output
+    assert meta["recommended_next_action"] == "desktop_snapshot"
+    assert meta["text_file"].endswith("desktop-open-state-text.txt")
+
+
 def test_desktop_open_recovers_stale_manual_desktop_cdp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     paths = _paths(tmp_path, "desktop_open")
     calls: list[str] = []
