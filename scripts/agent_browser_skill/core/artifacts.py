@@ -109,6 +109,31 @@ def cleanup_runtime_caches(root: Path) -> list[str]:
     return notes
 
 
+def cleanup_legacy_browser_use(root: Path) -> list[str]:
+    """Remove legacy browser-use runtime data that is protected by this skill.
+
+    Older browser runs can leave a large `.browser-use` directory in the
+    workspace. Generic shell cleanup is blocked for protected browser-owned
+    paths, so the skill cleanup action must reclaim this space itself. Saved
+    agent-browser profiles live under `.agent-browser/profiles`, not here.
+    """
+
+    notes = []
+    target = root / ".browser-use"
+    try:
+        if not target.exists():
+            return notes
+        size = path_size(target) if target.is_dir() else target.stat().st_size
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+        notes.append(f"removed legacy browser-use data {target.relative_to(root)} ({size // 1024 // 1024}MB)")
+    except Exception as exc:
+        notes.append(f"cleanup skipped {target}: {exc}")
+    return notes
+
+
 def cleanup_profile_caches(root: Path) -> list[str]:
     notes = []
     profiles_root = root / ".agent-browser" / "profiles"
@@ -154,6 +179,8 @@ def auto_cleanup_if_needed(root: Path) -> list[str]:
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_runtime_caches(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
+        notes.extend(cleanup_legacy_browser_use(root))
+    if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_profile_caches(root))
     return notes
 
@@ -163,6 +190,8 @@ def cleanup_note(root: Path) -> str:
     notes.extend(cleanup_browser_artifacts(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_runtime_caches(root))
+    if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
+        notes.extend(cleanup_legacy_browser_use(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_profile_caches(root))
     size_mb = path_size(root) // 1024 // 1024

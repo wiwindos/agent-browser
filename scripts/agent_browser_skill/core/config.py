@@ -86,4 +86,4 @@ MANUAL_BROWSER_PROFILE_ACTIONS = {
     "evaluate",
     "saby_tenders_csv",
 }
-LOCKLESS_ACTIONS = {"status", "profile_aliases"}
+LOCKLESS_ACTIONS = {"status", "profile_aliases", "cleanup"}
