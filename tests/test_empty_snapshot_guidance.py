@@ -13,6 +13,8 @@ if str(SCRIPTS) not in sys.path:
 
 from agent_browser_skill.actions_generic import action_snapshot
 from agent_browser_skill.actions_manual import action_desktop_open, action_read_artifact
+from agent_browser_skill.core.config import LOCKLESS_ACTIONS
+from agent_browser_skill.core.artifacts import cleanup_note
 from agent_browser_skill.core.paths import paths_for
 from agent_browser_skill.errors import ToolError
 from agent_browser_skill.domains.saby.state import build_prepared_state, build_saby_options
@@ -115,3 +117,24 @@ def test_desktop_open_recovers_stale_manual_desktop_cdp(monkeypatch: pytest.Monk
     assert meta["desktop_open_started_manual_desktop"] is True
     assert meta["desktop_open_recovered_stale_cdp"] is True
     assert meta["manual_desktop_stop"] == "stopped: chrome"
+
+
+def test_cleanup_is_lockless_for_timeout_recovery() -> None:
+    assert "cleanup" in LOCKLESS_ACTIONS
+
+
+def test_cleanup_removes_legacy_browser_use_when_workspace_is_over_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    legacy_cache = tmp_path / ".browser-use" / "Default" / "Cache"
+    legacy_cache.mkdir(parents=True)
+    (legacy_cache / "blob.bin").write_bytes(b"x" * 2048)
+    (tmp_path / "keep.txt").write_text("keep", encoding="utf-8")
+
+    monkeypatch.setattr("agent_browser_skill.core.artifacts.WORKSPACE_SOFT_LIMIT_BYTES", 1)
+
+    output = cleanup_note(tmp_path)
+
+    assert not (tmp_path / ".browser-use").exists()
+    assert (tmp_path / "keep.txt").exists()
+    assert "removed legacy browser-use data .browser-use" in output
