@@ -849,7 +849,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
     output = "\n".join(
         _state_summary_lines("desktop_opened", state, state_file, text_file, challenge_detected)
         + [
-            f"next_step: {'wait for the user and then call continue_after_manual' if challenge_detected else 'continue with action=desktop_snapshot or action=saby_tenders_csv as needed'}",
+            f"next_step: {'wait for the user and then call continue_after_manual' if challenge_detected else 'read text_file with action=read_artifact, then continue with desktop_snapshot, navigate_pagination, or site controls until the requested page data is extracted; use screenshot only if explicitly requested or needed for visual diagnostics'}",
         ]
     )
     return output, meta
