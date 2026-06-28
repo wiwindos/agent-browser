@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.63
+
+- Made `read_artifact` resilient to artifact run directories by automatically selecting the best readable text/json/html/csv artifact, preferring page text files over snapshots and state files.
+- Raised the effective `read_artifact max_chars` ceiling to match the 12000-character output cap so larger artifact reads do not silently clamp to 3000 characters.
+- Added regression coverage for directory auto-resolution and no-readable-artifact errors.
+
 ## 0.3.62
 
 - Recovered `desktop_open` from stale manual-desktop Chrome PIDs whose CDP port is no longer reachable by restarting the manual desktop instead of returning a CDP timeout.

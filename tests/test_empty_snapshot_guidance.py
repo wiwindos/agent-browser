@@ -43,19 +43,34 @@ def test_empty_snapshot_returns_read_artifact_next_tool_call(monkeypatch: pytest
     assert "fallback_after_read" in output
 
 
-def test_read_artifact_directory_error_points_to_exact_files(tmp_path: Path) -> None:
+def test_read_artifact_directory_resolves_to_best_readable_file(tmp_path: Path) -> None:
     paths = _paths(tmp_path, "snapshot")
-    recent = paths["logs"] / "snapshot.json"
-    recent.write_text('{"title":""}', encoding="utf-8")
+    screenshot = paths["screenshots"] / "screenshot.png"
+    screenshot.write_bytes(b"not text")
+    state = paths["logs"] / "desktop-snapshot-state.json"
+    state.write_text('{"title":"Example"}', encoding="utf-8")
+    text_file = paths["logs"] / "desktop-snapshot-state-text.txt"
+    text_file.write_text("Useful page text", encoding="utf-8")
+
+    output, meta = action_read_artifact(tmp_path, paths, {"action": "read_artifact", "path": str(paths["artifact"])})
+
+    assert "artifact_read_ok=true" in output
+    assert f"artifact_directory: {paths['artifact']}" in output
+    assert f"artifact_directory_resolved_file: {text_file}" in output
+    assert "Useful page text" in output
+    assert meta["artifact_file"] == str(text_file)
+    assert meta["artifact_directory_resolved_file"] == str(text_file)
+
+
+def test_read_artifact_directory_errors_when_no_readable_files(tmp_path: Path) -> None:
+    paths = _paths(tmp_path, "snapshot")
+    screenshot = paths["screenshots"] / "screenshot.png"
+    screenshot.write_bytes(b"not text")
 
     with pytest.raises(ToolError) as exc_info:
         action_read_artifact(tmp_path, paths, {"action": "read_artifact", "path": str(paths["artifact"])})
 
-    message = str(exc_info.value)
-    assert "requires a file path, not an artifact directory" in message
-    assert "Use the exact snapshot_file/state_file/text_file path" in message
-    assert "Do not use read_file for browser-artifacts" in message
-    assert str(recent) in message
+    assert "found no readable text/json/html/csv files" in str(exc_info.value)
 
 
 def test_saby_subscription_text_is_preserved_in_options_and_resume_call() -> None:
