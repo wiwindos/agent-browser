@@ -75,10 +75,25 @@ def _sanitize_message(message: str, root: Path) -> str:
     return re.sub(root_s + r"/[^\s,]+", lambda m: opaque_id(m.group(0), "art"), message)
 
 
+
+def _suggested_next_action(action: str, state: dict) -> str | None:
+    allowed = state.get("next_allowed_actions") or []
+    if action in {"open", "open_page"}:
+        return "wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None)
+    if action == "desktop_open":
+        return "scroll_until_stable" if "scroll_until_stable" in allowed else ("wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None))
+    if action == "status" and state.get("phase") in {"READY", "LOADED"}:
+        for candidate in ("get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
+            if candidate in allowed:
+                return candidate
+    return allowed[0] if allowed else None
+
 def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dict:
     meta = _sanitize_value(dict(payload.get("metadata") or {}), root)
-    warnings = list(meta.pop("warnings", []) or [])
+    warnings = list(meta.get("warnings", []) or [])
     output = _sanitize_message(str(payload.get("output") or ""), root)
+    if not output.strip():
+        output = f"{action} completed" if payload.get("success") else f"{action} failed"
     sid = state.get("session_id") or "default"
     unified = {
         "success": bool(payload.get("success")),
@@ -88,7 +103,7 @@ def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dic
         "state": state,
         "error_code": None,
         "message": output,
-        "suggested_next_action": (state.get("next_allowed_actions") or [None])[0],
+        "suggested_next_action": _suggested_next_action(action, state),
         "next_allowed_actions": state.get("next_allowed_actions") or [],
         "warnings": warnings,
     }
@@ -109,7 +124,7 @@ def _error_payload(
     state = dict(state or {})
     state.setdefault("next_allowed_actions", [])
     state["last_error"] = message
-    suggested = suggested_next_action or (state.get("next_allowed_actions") or [None])[0]
+    suggested = suggested_next_action or _suggested_next_action(action, state)
     return {
         "success": False, "ok": False, "action": action, "session_id": state.get("session_id", "default"),
         "state": state, "error_code": code, "message": message, "suggested_next_action": suggested,
@@ -280,6 +295,9 @@ def run_request(request: dict) -> dict:
             if meta.get(key):
                 state[state_key] = opaque_id(meta[key], prefix)
         state["next_allowed_actions"] = NEXT_ALLOWED.get(state.get("phase", "NEW"), NEXT_ALLOWED["NEW"])
+        if requested_action == "status" and state.get("phase") in {"READY", "LOADED"}:
+            preferred = ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
+            state["next_allowed_actions"] = list(dict.fromkeys([*preferred, *state["next_allowed_actions"]]))
         state["last_error"] = None
         save_state(root, state)
         payload = ToolResult.ok(output, meta).to_payload(redact=redact, cap_output=cap_output)
