@@ -1215,6 +1215,11 @@ def action_smart_read(root: Path, paths: dict[str, Path], args: dict[str, Any]) 
 
 
 def action_find_text(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    if args.get("artifact_id"):
+        from agent_browser_skill.actions_artifacts import action_search_artifact
+        output, meta = action_search_artifact(root, paths, args)
+        meta["find_text_used"] = True
+        return "find_text_ok=true\n" + output, meta
     find_args = dict(args)
     find_args["action"] = "read_artifact"
     if not str(find_args.get("query") or find_args.get("regex") or "").strip():
