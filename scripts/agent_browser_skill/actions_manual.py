@@ -23,6 +23,8 @@ from agent_browser_skill.core.workflow import (
     pending_text_read,
     remember_pending_text_read,
     remember_pending_markdown_read,
+    remember_pending_page_markdown,
+    mark_pending_gate_completed,
     markdown_first_policy,
     text_workflow_guard_response,
 )
@@ -967,7 +969,14 @@ def _page_markdown_next_lines(*, legacy_text_file: Path | None = None) -> list[s
 def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     url = str(args.get("url") or "").strip()
     if not url:
-        raise ToolError("url is required for desktop_open")
+        url = remembered_url(root, paths)
+    if not url:
+        profile = str(args.get("profile") or paths["site"].name)
+        raise ToolError(
+            f"url is required for desktop_open profile={profile}; no remembered URL is available for this profile. "
+            "Recovery path: call desktop_open with the original url, then page_markdown, then read_page_md. "
+            f"Keep profile/site_key context as {paths['site'].name}; do not reset to a different profile."
+        )
     if not desktop.manual_desktop_running(root):
         remember_url(root, paths, url)
         output, meta = action_manual_desktop(root, paths, args)
@@ -1001,6 +1010,9 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
             ]
         ), meta
     state_file, text_file = _state_artifacts(root, paths, "desktop-open-state", state)
+    page_kind = _page_kind(state.get("url") or url, state.get("title"), state.get("text"))
+    if not desktop.state_needs_manual_action(state):
+        remember_pending_page_markdown(root, paths, current_url=state.get("url") or url, title=state.get("title"), page_kind=page_kind)
     meta = metadata(paths)
     meta.update(
         {
@@ -1017,7 +1029,6 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
     current_url = str(state.get("url") or url).strip()
     if current_url:
         continue_args["url"] = current_url
-    page_kind = _page_kind(state.get("url") or url, state.get("title"), state.get("text"))
     meta.update(
         build_browser_workflow(
             state="awaiting_user_completion",
@@ -1070,6 +1081,7 @@ def action_desktop_snapshot(root: Path, paths: dict[str, Path], args: dict[str, 
     )
     page_kind = _page_kind(state.get("url"), state.get("title"), state.get("text"))
     if not challenge:
+        remember_pending_page_markdown(root, paths, current_url=state.get("url"), title=state.get("title"), page_kind=page_kind)
         meta.update(_markdown_workflow_meta(None, None))
         meta["page_kind"] = page_kind
         meta["legacy_text_file"] = str(text_file)
@@ -1589,6 +1601,7 @@ def action_page_markdown(root: Path, paths: dict[str, Path], args: dict[str, Any
     from agent_browser_skill.core.action_schemas import opaque_id
     artifact_id = opaque_id(md_file, "md")
     elements_id = opaque_id(elements_file, "map")
+    mark_pending_gate_completed(root, paths, "page_markdown")
     remember_pending_markdown_read(root, paths, markdown_file=md_file, elements_file=elements_file, artifact_id=artifact_id, current_url=snapshot["url"], title=snapshot["title"], max_chars=max_chars)
     meta = metadata(paths)
     meta.update({"manual_desktop_active": True, "current_url": snapshot["url"], "title": snapshot["title"], "markdown_file": str(md_file), "text_file": str(md_file), "artifact_id": artifact_id, "elements_file": str(elements_file), "elements_artifact_id": elements_id, "snapshot_file": str(full_file), "content_md_length": len(snapshot["content_md"]), "ui_elements_count": len(snapshot["elements"]), "warnings": snapshot.get("warnings") or []})
@@ -1623,6 +1636,7 @@ def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]
         "next_tool_call": {"action": "page_markdown"},
         "markdown_first_policy": markdown_first_policy(artifact_id=artifact_id or None, markdown_file=path),
     })
+    mark_pending_gate_completed(root, paths, "read_page_md")
     return "read_page_md_ok=true\n" + output + "\nnext_step: choose a UI handle/action from the Markdown, or call page_markdown after any page-changing action", meta
 
 

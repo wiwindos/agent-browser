@@ -41,7 +41,7 @@ class Schema:
 SCHEMAS: dict[str, Schema] = {
     "open_page": Schema({"url": Field(str, True), "profile": Field(str, False, "default"), "wait_until": Field(str, False, "networkidle", {"load", "domcontentloaded", "networkidle"}), "json": Field(bool, False, True)}, {"url_or_page": "url"}),
     "open": Schema({"url": Field(str, True), "profile": Field(str, False, "default"), "wait_until": Field(str, False, "networkidle", {"load", "domcontentloaded", "networkidle"}), "json": Field(bool, False, True)}, {"url_or_page": "url"}),
-    "desktop_open": Schema({"url": Field(str, True), "profile": Field(str, False, "default"), "wait_until": Field(str, False, "domcontentloaded")}, {"url_or_page": "url"}),
+    "desktop_open": Schema({"url": Field(str), "profile": Field(str, False, "default"), "wait_until": Field(str, False, "domcontentloaded")}, {"url_or_page": "url"}),
     "page_markdown": Schema({"max_chars": Field(int, False, 3000, min_value=500, max_value=12000), "max_blocks": Field(int, False, 220, min_value=20, max_value=1000), "max_elements": Field(int, False, 250, min_value=20, max_value=1000)}),
     "read_page_md": Schema({"max_chars": Field(int, False, 3000, min_value=100, max_value=12000), "mode": Field(str, False, "head", {"head", "tail"}), "query": Field(str), "regex": Field(str), "context_lines": Field(int, False, 5, min_value=0, max_value=20)}),
     "read_artifact": Schema({"path": Field(str), "file": Field(str), "artifact_id": Field(str), "mode": Field(str, False, "head", {"head", "tail"}), "max_chars": Field(int, False, 3000, min_value=100, max_value=12000), "query": Field(str), "regex": Field(str), "context_lines": Field(int, False, 5, min_value=0, max_value=20)}),
