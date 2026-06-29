@@ -8,7 +8,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 
 ## Choose Workflow
 
-- Normal webpage: `open` -> `snapshot` -> `click` / `fill` / `wait` -> `screenshot`.
+- Normal webpage: `open` -> `wait_ready` -> typed extraction/action (`get_page_text`, `find_text`, `extract_links`, `extract_blocks`, `click_text`, `click_selector`) -> `screenshot` only when visual proof is needed.
 - Generic multi-step browser task: call `action=skills skill=core full=true` first, then continue through the single `browser` tool.
 - Empty or unusable snapshot: if `snapshot_ok=true` but `refs_count=0`, `title=(unknown)`, or useful page text is missing, read the exact returned `snapshot_file` with `read_artifact`; if still unusable, use `desktop_open` -> `desktop_snapshot` on the same profile/url before trying `screenshot`.
 - Authenticated site: use `login` with a stable `profile`; see `reference/auth-and-profiles.md`.
@@ -45,7 +45,8 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Do not use `read_file` or shell tools to open files under `browser-artifacts/`; use `read_artifact`.
 - Prefer exact file paths with `read_artifact`, especially returned `snapshot_file`, `state_file`, `text_file`, or another `*_file`. If only an artifact run directory is available, pass it to `read_artifact`; the tool will auto-select the best readable text/json artifact.
 - Do not use `screenshot` as the first recovery step for an empty snapshot, and do not substitute a screenshot for requested textual extraction unless the user explicitly asked for an image or visual proof.
-- Do not use raw `fetch_page`, `action=run`, or large raw `evaluate` dumps for page text or HTML if `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
+- Do not use raw `fetch_page`, `action=run`, or large raw `evaluate` dumps for page text or HTML if typed actions (`get_page_text`, `find_text`, `extract_links`, `extract_blocks`), `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
+- Raw `evaluate` is forbidden for ordinary browsing tasks and the normal/happy path. Use typed actions instead. `evaluate` is only allowed when explicitly passed `allow_unsafe_eval=true`; otherwise it returns `RAW_EVAL_DISABLED`/`VALIDATION_ERROR` with a `suggested_next_action`.
 
 ## References
 

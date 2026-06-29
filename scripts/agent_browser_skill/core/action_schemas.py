@@ -8,13 +8,13 @@ from typing import Any, Callable
 
 from agent_browser_skill.errors import ToolError
 
-ERROR_CODES = {"VALIDATION_ERROR", "NAVIGATION_ERROR", "EXTRACTION_ERROR", "BLOCKED", "INTERNAL_ERROR"}
+ERROR_CODES = {"VALIDATION_ERROR", "NAVIGATION_ERROR", "EXTRACTION_ERROR", "BLOCKED", "INTERNAL_ERROR", "RAW_EVAL_DISABLED"}
 PHASES = ["NEW", "OPENED", "READY", "LOADED", "EXTRACTED", "ANSWER_READY", "DONE"]
 NEXT_ALLOWED = {
     "NEW": ["open_page", "desktop_open", "list_artifacts"],
     "OPENED": ["wait_ready", "screenshot", "desktop_open"],
-    "READY": ["read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
-    "LOADED": ["read_artifact_by_id", "search_artifact", "read_artifact_slice", "find_text", "screenshot", "list_artifacts"],
+    "READY": ["get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
+    "LOADED": ["wait_ready", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
     "EXTRACTED": ["search_artifact", "read_artifact_slice", "list_artifacts"],
     "ANSWER_READY": ["list_artifacts", "open_page", "desktop_open"],
     "DONE": ["open_page", "desktop_open", "list_artifacts"],
@@ -47,8 +47,16 @@ SCHEMAS: dict[str, Schema] = {
     "read_artifact_slice": Schema({"artifact_id": Field(str, True), "offset": Field(int, False, 0, min_value=0), "length": Field(int, False, 4000, min_value=1, max_value=12000)}),
     "list_artifacts": Schema({"limit": Field(int, False, 20, min_value=1, max_value=200), "profile": Field(str)}),
     "screenshot": Schema({"filename": Field(str), "full_page": Field(bool, False, False), "force": Field(bool, False, False)}),
+    "scroll_until_stable": Schema({"max_scrolls": Field(int, False, 30, min_value=1, max_value=200), "pause_ms": Field(int, False, 600, min_value=100, max_value=5000), "timeout": Field((int, float), False, 30, min_value=1, max_value=300)}),
+    "get_page_text": Schema({"max_chars": Field(int, False, 6000, min_value=100, max_value=20000)}),
+    "get_title": Schema({}),
+    "extract_links": Schema({"max_links": Field(int, False, 100, min_value=1, max_value=1000)}),
+    "extract_blocks": Schema({"max_blocks": Field(int, False, 80, min_value=1, max_value=500), "max_chars_per_block": Field(int, False, 500, min_value=50, max_value=5000)}),
+    "click_text": Schema({"text": Field(str), "query": Field(str)}),
+    "click_selector": Schema({"selector": Field(str, True)}),
+    "evaluate": Schema({"script": Field(str), "code": Field(str), "text": Field(str), "allow_unsafe_eval": Field(bool, False, False), "force": Field(bool, False, False)}),
 }
-ACTION_ALIASES = {"open_page": "open", "wait_ready": "wait"}
+ACTION_ALIASES = {"open_page": "open"}
 
 
 def _coerce(name: str, value: Any, field: Field) -> Any:
