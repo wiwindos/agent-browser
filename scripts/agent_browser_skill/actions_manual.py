@@ -9,7 +9,7 @@ from typing import Any
 
 from agent_browser_skill.actions_generic import action_open
 from agent_browser_skill.browser import cdp, dashboard, desktop
-from agent_browser_skill.core.args import bool_arg, timeout_from
+from agent_browser_skill.core.args import bool_arg, int_arg, timeout_from
 from agent_browser_skill.core.artifacts import artifact_download_files
 from agent_browser_skill.core.output import cap_output, metadata
 from agent_browser_skill.core.paths import ensure_inside, remember_url, remembered_url
@@ -1199,6 +1199,111 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
     return output, meta
 
 
+
+def _json_script(payload: dict[str, Any], body: str) -> str:
+    return f"""
+(() => {{
+  const args = {json.dumps(payload, ensure_ascii=False)};
+{body}
+}})()
+"""
+
+
+def _typed_page_summary(root: Path, paths: dict[str, Path], prefix: str, result: Any) -> tuple[str, dict[str, Any]]:
+    result_text = json.dumps(result, ensure_ascii=False, indent=2) if isinstance(result, (dict, list)) else str(result)
+    result_file = write_json_artifact(root, paths, prefix, result if isinstance(result, (dict, list)) else {"result": result})
+    meta = metadata(paths)
+    meta.update({"manual_desktop_active": True, "result_file": str(result_file)})
+    return "\n".join([f"{prefix}_ok=true", f"result_file: {result_file}", cap_output(result_text, 4000)]), meta
+
+
+def action_wait_ready(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    return action_wait(root, paths, args)
+
+
+def action_scroll_until_stable(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    timeout = timeout_from(args)
+    script = _json_script({"maxScrolls": int_arg(args, "max_scrolls", 30, 1, 200), "pauseMs": int_arg(args, "pause_ms", 600, 100, 5000)}, """
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const height = () => Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
+  const textLen = () => (document.body?.innerText || '').length;
+  let lastHeight = height();
+  let lastTextLen = textLen();
+  let scrollCount = 0;
+  let stableRounds = 0;
+  let newContentDetected = false;
+  for (; scrollCount < args.maxScrolls && stableRounds < 2; scrollCount++) {
+    window.scrollTo(0, height());
+    await sleep(args.pauseMs);
+    const nextHeight = height();
+    const nextTextLen = textLen();
+    if (nextHeight > lastHeight || nextTextLen > lastTextLen) newContentDetected = true;
+    if (nextHeight === lastHeight && nextTextLen === lastTextLen) stableRounds += 1;
+    else stableRounds = 0;
+    lastHeight = nextHeight; lastTextLen = nextTextLen;
+  }
+  return {stable: stableRounds >= 2, scroll_count: scrollCount, final_scroll_height: lastHeight, new_content_detected: newContentDetected};
+""")
+    result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script, timeout=timeout)
+    return _typed_page_summary(root, paths, "scroll_until_stable", result)
+
+
+def action_get_title(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), "document.title")
+    return _typed_page_summary(root, paths, "get_title", {"title": result})
+
+
+def action_get_page_text(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    max_chars = int_arg(args, "max_chars", 6000, 100, 20000)
+    text = str(cdp.cdp_eval(desktop.desktop_cdp_port_from(args), "document.body ? document.body.innerText : ''", timeout=timeout_from(args)) or "")
+    text_file = write_text_artifact(root, paths, "page-text", text)
+    shown = text if len(text) <= max_chars else text[:max_chars] + "\n...[truncated; read text_file for full content]"
+    meta = metadata(paths); meta.update({"text_file": str(text_file), "text_length": len(text), "returned_chars": len(shown)})
+    return "\n".join(["get_page_text_ok=true", f"text_length: {len(text)}", f"returned_chars: {len(shown)}", f"text_file: {text_file}", "", cap_output(shown, max_chars + 200)]), meta
+
+
+def action_extract_links(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    max_links = int_arg(args, "max_links", 100, 1, 1000)
+    script = _json_script({"maxLinks": max_links}, """
+  const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const loc = (el) => { const r = el.getBoundingClientRect(); return {x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height)}; };
+  return Array.from(document.querySelectorAll('a[href]')).slice(0, args.maxLinks).map((a) => ({text: (a.innerText || a.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 300), href: a.href, visible: visible(a), location: loc(a)}));
+""")
+    result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script)
+    return _typed_page_summary(root, paths, "extract_links", {"links": result, "count": len(result) if isinstance(result, list) else 0})
+
+
+def action_extract_blocks(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    script = _json_script({"maxBlocks": int_arg(args, "max_blocks", 80, 1, 500), "maxChars": int_arg(args, "max_chars_per_block", 500, 50, 5000)}, """
+  const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const loc = (el) => { const r = el.getBoundingClientRect(); return {x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height)}; };
+  const typeOf = (el) => /^H[1-6]$/.test(el.tagName) ? 'heading' : el.tagName === 'P' ? 'paragraph' : el.tagName === 'LI' ? 'list_item' : /TABLE|THEAD|TBODY|TR|TD|TH/.test(el.tagName) ? 'table_like' : /card|item|tile|result|product|article/i.test(el.className || '') ? 'card' : null;
+  const out = [];
+  for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,table,[role="listitem"],article,section,div')) {
+    if (out.length >= args.maxBlocks) break;
+    if (!visible(el)) continue;
+    const kind = typeOf(el); if (!kind) continue;
+    const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+    if (text.length < 2) continue;
+    out.push({type: kind, tag: el.tagName.toLowerCase(), text: text.slice(0, args.maxChars), chars: text.length, location: loc(el)});
+  }
+  return out;
+""")
+    result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script)
+    return _typed_page_summary(root, paths, "extract_blocks", {"blocks": result, "count": len(result) if isinstance(result, list) else 0})
+
+
+def action_click_text(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    text = str(args.get("text") or args.get("query") or "").strip()
+    if not text:
+        raise ToolError("text is required for click_text")
+    return action_click(root, paths, {**args, "selector": "text=" + text})
+
+
+def action_click_selector(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    return action_click(root, paths, args)
+
+
 def action_smart_read(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     read_args = dict(args)
     read_args["action"] = "read_artifact"
@@ -1215,22 +1320,56 @@ def action_smart_read(root: Path, paths: dict[str, Path], args: dict[str, Any]) 
 
 
 def action_find_text(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    if args.get("artifact_id"):
-        from agent_browser_skill.actions_artifacts import action_search_artifact
-        output, meta = action_search_artifact(root, paths, args)
+    if args.get("artifact_id") or str(args.get("path") or args.get("file") or "").strip() or pending_text_read(root, paths):
+        if args.get("artifact_id"):
+            from agent_browser_skill.actions_artifacts import action_search_artifact
+            output, meta = action_search_artifact(root, paths, args)
+            meta["find_text_used"] = True
+            return "find_text_ok=true\n" + output, meta
+        find_args = dict(args)
+        find_args["action"] = "read_artifact"
+        if not str(find_args.get("query") or find_args.get("regex") or "").strip():
+            raise ToolError("find_text requires query or regex")
+        if "context_lines" not in find_args:
+            find_args["context_lines"] = 5
+        output, meta = action_smart_read(root, paths, find_args)
         meta["find_text_used"] = True
         return "find_text_ok=true\n" + output, meta
-    find_args = dict(args)
-    find_args["action"] = "read_artifact"
-    if not str(find_args.get("query") or find_args.get("regex") or "").strip():
-        raise ToolError("find_text requires query or regex")
-    if "context_lines" not in find_args:
-        find_args["context_lines"] = 5
-    output, meta = action_smart_read(root, paths, find_args)
-    meta["find_text_used"] = True
-    output = "find_text_ok=true\n" + output
-    return output, meta
 
+    query = str(args.get("query") or args.get("text") or "").strip()
+    regex = str(args.get("regex") or "").strip()
+    if not query and not regex:
+        raise ToolError("find_text requires query or regex")
+    max_matches = int_arg(args, "max_matches", 20, 1, 100)
+    snippet_chars = int_arg(args, "snippet_chars", 160, 40, 1000)
+    script = _json_script({"query": query, "regex": regex, "maxMatches": max_matches, "snippetChars": snippet_chars}, """
+  const norm = (s) => (s || '').normalize('NFKC').replace(/\\s+/g, ' ').trim();
+  const hay = norm(document.body?.innerText || '');
+  const matches = [];
+  if (args.regex) {
+    const re = new RegExp(args.regex, 'giu');
+    let m;
+    while ((m = re.exec(hay)) && matches.length < args.maxMatches) {
+      const start = Math.max(0, m.index - args.snippetChars / 2);
+      matches.push({text: m[0], snippet: hay.slice(start, m.index + m[0].length + args.snippetChars / 2), location: {text_offset: m.index}});
+      if (m[0].length === 0) re.lastIndex++;
+    }
+  } else {
+    const needle = norm(args.query).toLocaleLowerCase();
+    const lower = hay.toLocaleLowerCase();
+    let pos = 0;
+    while ((pos = lower.indexOf(needle, pos)) !== -1 && matches.length < args.maxMatches) {
+      const start = Math.max(0, pos - args.snippetChars / 2);
+      matches.push({text: hay.slice(pos, pos + needle.length), snippet: hay.slice(start, pos + needle.length + args.snippetChars / 2), location: {text_offset: pos}});
+      pos += Math.max(needle.length, 1);
+    }
+  }
+  return {query: args.query || null, regex: args.regex || null, matches, count: matches.length};
+""")
+    result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script)
+    output, meta = _typed_page_summary(root, paths, "find_text", result)
+    meta["find_text_used"] = True
+    return output, meta
 
 def action_navigate_pagination(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not desktop.manual_desktop_running(root):
@@ -1351,6 +1490,11 @@ def action_evaluate(root: Path, paths: dict[str, Path], args: dict[str, Any]) ->
         )
         if guarded:
             return guarded
+    if not bool_arg(args, "allow_unsafe_eval", False):
+        suggested = {"action": "get_page_text" if text_like else "extract_blocks"}
+        meta = metadata(paths)
+        meta.update({"error_code": "RAW_EVAL_DISABLED", "suggested_next_action": suggested})
+        return "\n".join(["RAW_EVAL_DISABLED", "raw evaluate is disabled for normal browsing; use typed actions", "suggested_next_action: " + json.dumps(suggested, ensure_ascii=False)]), meta
     before_downloads = set(paths["downloads"].glob("*")) if paths["downloads"].exists() else set()
     value = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script)
     time.sleep(1.0)
