@@ -159,6 +159,138 @@ def pending_text_read(root: Path, paths: dict[str, Path]) -> dict[str, Any] | No
     return None
 
 
+
+
+def remember_pending_page_markdown(
+    root: Path,
+    paths: dict[str, Path],
+    *,
+    current_url: Any = None,
+    title: Any = None,
+    page_kind: str = "generic_page",
+) -> dict[str, Any]:
+    state = load_workflow_state(root, paths)
+    next_call = {"action": "page_markdown"}
+    state.update(
+        {
+            "workflow_state": "needs_page_markdown",
+            "pending_next_action": "page_markdown",
+            "pending_next_tool_call": next_call,
+            "last_url": str(current_url or ""),
+            "last_title": str(title or ""),
+            "page_kind": page_kind,
+            "markdown_workflow_active": True,
+        }
+    )
+    save_workflow_state(root, paths, state)
+    return state
+
+
+def pending_workflow_gate(root: Path, paths: dict[str, Path]) -> dict[str, Any] | None:
+    state = load_workflow_state(root, paths)
+    pending = state.get("pending_next_tool_call")
+    action = str(state.get("pending_next_action") or "").strip()
+    if action and isinstance(pending, dict):
+        return state
+    return None
+
+
+def mark_pending_gate_completed(root: Path, paths: dict[str, Path], action: str) -> None:
+    state = load_workflow_state(root, paths)
+    if str(state.get("pending_next_action") or "") == action:
+        state.pop("pending_next_action", None)
+        state.pop("pending_next_tool_call", None)
+        if action == "page_markdown":
+            state["workflow_state"] = "markdown_ready"
+        elif action == "read_page_md":
+            state["workflow_state"] = "markdown_read"
+            state["text_artifact_read"] = True
+        save_workflow_state(root, paths, state)
+
+
+def workflow_gate_guard_response(
+    root: Path,
+    paths: dict[str, Path],
+    *,
+    attempted_action: str,
+    reason: str = "pending browser workflow gate must be completed first",
+) -> tuple[str, dict[str, Any]] | None:
+    state = pending_workflow_gate(root, paths)
+    if not state:
+        return None
+    required = str(state.get("pending_next_action") or "")
+    if attempted_action == required:
+        return None
+    next_call = dict(state.get("pending_next_tool_call") or {"action": required})
+    meta = {
+        "workflow_state": "blocked_until_" + required,
+        "attempted_action": attempted_action,
+        "guard_reason": reason,
+        "recommended_next_action": required,
+        "next_tool_call": next_call,
+        "required_next_tool_call": next_call,
+        "last_markdown_file": state.get("last_markdown_file"),
+        "last_text_file": state.get("last_text_file"),
+        "page_kind": state.get("page_kind"),
+        "constraints": {
+            "must_complete_pending_browser_workflow_gate": True,
+            "do_not_use_external_fetch_or_shell_for_browser_content": True,
+            "do_not_use_parser_write_fallback_for_browser_content": True,
+        },
+    }
+    output = "\n".join([
+        f"{attempted_action}_deferred=true",
+        f"guard_reason: {reason}",
+        f"pending_next_action: {required}",
+        "PRIMARY_NEXT_TOOL_CALL: " + json.dumps(next_call, ensure_ascii=False),
+        "next_tool_call: " + json.dumps(next_call, ensure_ascii=False),
+        "required_next_tool_call: " + json.dumps(next_call, ensure_ascii=False),
+    ])
+    return output, meta
+
+def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str | None = None) -> dict[str, Any]:
+    return {
+        "primary_loop": [
+            "desktop_open",
+            "page_markdown",
+            "reason_over_markdown_and_ui_handles",
+            "click_handle/fill_handle/select_handle or other focused action",
+            "page_markdown_after_each_page_changing_action",
+        ],
+        "read_primary_source": "Read the Markdown snapshot artifact first; use query/regex against it for dates and target text.",
+        "artifact_id": artifact_id,
+        "markdown_file": markdown_file,
+        "after_page_change": {"action": "page_markdown"},
+        "bounded_autonomy": {
+            "max_page_changing_steps": 8,
+            "if_not_found": "try pagination, filters, show/load more controls, or scroll_until_stable before returning a partial result",
+            "stop_condition": "answer when evidence is found or report partial result after bounded attempts",
+        },
+        "specialized_extractors": "Optional fast path only when Markdown shows the page matches article/table/search/date/forum patterns.",
+    }
+
+
+def remember_pending_markdown_read(root: Path, paths: dict[str, Path], *, markdown_file: Path, elements_file: Path | None = None, artifact_id: str | None = None, current_url: Any = None, title: Any = None, max_chars: int = 3000) -> dict[str, Any]:
+    state = load_workflow_state(root, paths)
+    read_call = {"action": "read_page_md", "max_chars": max_chars}
+    state.update({
+        "workflow_state": "needs_markdown_read",
+        "pending_next_action": "read_page_md",
+        "pending_next_tool_call": read_call,
+        "last_markdown_file": str(markdown_file),
+        "last_markdown_artifact_id": artifact_id or "",
+        "last_elements_file": str(elements_file or ""),
+        "last_text_file": str(markdown_file),
+        "last_url": str(current_url or ""),
+        "last_title": str(title or ""),
+        "page_kind": "markdown_page",
+        "text_artifact_read": False,
+        "markdown_workflow_active": True,
+    })
+    state.setdefault("artifact_reads", {})
+    save_workflow_state(root, paths, state)
+    return state
+
 def duplicate_read_guard(
     root: Path,
     paths: dict[str, Path],

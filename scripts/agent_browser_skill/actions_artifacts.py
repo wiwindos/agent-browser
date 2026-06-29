@@ -22,7 +22,7 @@ def _files(root: Path) -> list[Path]:
 
 def _resolve(root: Path, artifact_id: str) -> Path:
     for p in _files(root):
-        if opaque_id(p, "art") == artifact_id or opaque_id(p, "snap") == artifact_id:
+        if any(opaque_id(p, prefix) == artifact_id for prefix in ("art", "snap", "md", "map")):
             return p
     raise ToolError(f"artifact_id not found: {artifact_id}")
 
@@ -46,7 +46,7 @@ def action_list_artifacts(root: Path, paths: dict[str, Path], args: dict[str, An
     rows = []
     for p in _files(root)[:limit]:
         rel = p.relative_to(root / "browser-artifacts")
-        prefix = "snap" if "snapshot" in p.name.lower() or "state" in p.name.lower() else "art"
+        prefix = "md" if p.name.startswith("page-md") and p.suffix.lower() in {".txt", ".md"} else ("snap" if "snapshot" in p.name.lower() or "state" in p.name.lower() else "art")
         rows.append({"artifact_id": opaque_id(p, prefix), "name": p.name, "kind": prefix, "size_bytes": p.stat().st_size, "relative_key": str(rel)})
     meta = metadata(paths); meta["artifacts"] = rows
     return "artifacts:\n" + json.dumps(rows, ensure_ascii=False, indent=2), meta

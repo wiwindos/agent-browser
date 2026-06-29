@@ -126,22 +126,43 @@ def test_desktop_open_guides_data_extraction_before_screenshot(monkeypatch: pyte
     )
 
     assert "text_file:" in output
-    assert "read the exact text_file with action=read_artifact" in output
-    assert "until the requested page data is extracted" in output
-    assert "next_tool_call:" in output
+    assert "PRIMARY_NEXT_TOOL_CALL" in output
+    assert "page_markdown" in output
+    assert "Markdown content plus stable UI handles" in output
     assert "desktop_screenshot" in output
     assert "read_file" in output
     assert "action=run" in output
-    assert meta["recommended_next_action"] == "read_artifact"
-    assert meta["next_tool_call"]["action"] == "read_artifact"
-    assert meta["next_tool_call"]["max_chars"] == 3000
-    assert meta["required_next_tool_call"] == meta["next_tool_call"]
+    assert meta["recommended_next_action"] == "page_markdown"
+    assert meta["next_tool_call"]["action"] == "page_markdown"
     assert "desktop_screenshot" in meta["forbidden_next_actions"]
-    assert meta["constraints"]["must_read_exact_text_file_first"] is True
-    assert meta["next_tool_call"]["path"].endswith("desktop-open-state-text.txt")
+    assert meta["constraints"]["do_not_use_screenshot_for_text"] is True
     assert meta["text_file"].endswith("desktop-open-state-text.txt")
     assert meta["page_kind"] == "forum_thread"
     assert meta["recommended_followup_after_read"]["action"] == "navigate_pagination"
+
+
+def test_desktop_open_bootstrap_preserves_markdown_first_guidance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: False)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.action_manual_desktop",
+        lambda root, p, args: ("manual desktop started", {"manual_desktop_active": True}),
+    )
+
+    output, meta = action_desktop_open(
+        tmp_path,
+        paths,
+        {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"},
+    )
+
+    assert "desktop_open_started_manual_desktop=true" in output
+    assert "PRIMARY_NEXT_TOOL_CALL" in output
+    assert "page_markdown" in output
+    assert meta["recommended_next_action"] == "page_markdown"
+    assert meta["next_tool_call"]["action"] == "page_markdown"
 
 
 def test_desktop_snapshot_guides_read_artifact_before_screenshot(
@@ -163,10 +184,8 @@ def test_desktop_snapshot_guides_read_artifact_before_screenshot(
 
     _output, meta = action_desktop_snapshot(tmp_path, paths, {"action": "desktop_snapshot", "profile": "example"})
 
-    assert meta["recommended_next_action"] == "read_artifact"
-    assert meta["next_tool_call"]["action"] == "read_artifact"
-    assert meta["next_tool_call"]["path"].endswith("desktop-snapshot-state-text.txt")
-    assert meta["required_next_tool_call"] == meta["next_tool_call"]
+    assert meta["recommended_next_action"] == "page_markdown"
+    assert meta["next_tool_call"]["action"] == "page_markdown"
     assert "run_command" in meta["forbidden_next_actions"]
     assert meta["page_kind"] == "forum_thread"
 
@@ -207,15 +226,14 @@ def test_navigate_pagination_guides_read_artifact_after_navigation(
     assert calls == ["https://example.com/forum/index.php?showtopic=1&st=500"]
     assert "navigate_pagination_ok=true" in output
     assert "next_tool_call:" in output
-    assert meta["recommended_next_action"] == "read_artifact"
-    assert meta["next_tool_call"]["action"] == "read_artifact"
-    assert meta["next_tool_call"]["max_chars"] == 6000
-    assert meta["next_tool_call"]["path"].endswith("pagination-last-state-text.txt")
+    assert "page_markdown" in output
+    assert meta["recommended_next_action"] == "page_markdown"
+    assert meta["next_tool_call"]["action"] == "page_markdown"
 
 
 
 
-def test_read_artifact_directory_deferred_when_exact_text_read_pending(
+def test_read_artifact_directory_resolves_when_no_exact_text_read_pending(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     paths = _paths(tmp_path, "desktop_open")
@@ -239,12 +257,10 @@ def test_read_artifact_directory_deferred_when_exact_text_read_pending(
     )
     output, meta = action_read_artifact(tmp_path, paths, {"action": "read_artifact", "path": str(paths["artifact"])})
 
-    assert "read_artifact_directory_deferred=true" in output
-    assert "required_next_tool_call:" in output
-    assert "do not pass the artifact run directory" in output
-    assert meta["workflow_state"] == "blocked_until_exact_text_read"
-    assert meta["required_next_tool_call"] == open_meta["required_next_tool_call"]
-    assert meta["required_next_tool_call"]["path"].endswith("desktop-open-state-text.txt")
+    assert "artifact_read_ok=true" in output
+    assert "artifact_directory_resolved_file" in output
+    assert meta["artifact_directory_resolved_file"].endswith("desktop-open-state-text.txt")
+    assert open_meta["recommended_next_action"] == "page_markdown"
 
 
 def test_read_artifact_query_returns_matching_context(tmp_path: Path) -> None:
@@ -269,7 +285,7 @@ def test_read_artifact_query_returns_matching_context(tmp_path: Path) -> None:
     assert meta["artifact_filter_matches"] == 1
 
 
-def test_desktop_screenshot_deferred_until_pending_text_read(
+def test_desktop_open_preserves_no_screenshot_guardrail_in_markdown_workflow(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     paths = _paths(tmp_path, "desktop_open")
@@ -281,16 +297,14 @@ def test_desktop_screenshot_deferred_until_pending_text_read(
     )
     monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
 
-    action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
-    output, meta = action_desktop_screenshot(tmp_path, paths, {"action": "desktop_screenshot", "profile": "example"})
+    output, meta = action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
 
-    assert "desktop_screenshot_deferred=true" in output
-    assert meta["workflow_state"] == "blocked_until_text_read"
-    assert meta["required_next_tool_call"]["action"] == "read_artifact"
-    assert meta["required_next_tool_call"]["path"].endswith("desktop-open-state-text.txt")
+    assert "do_not_use_for_text_extraction: desktop_screenshot" in output
+    assert meta["recommended_next_action"] == "page_markdown"
+    assert meta["constraints"]["do_not_use_screenshot_for_text"] is True
 
 
-def test_text_like_evaluate_deferred_until_pending_text_read(
+def test_text_like_evaluate_points_to_typed_markdown_workflow(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     paths = _paths(tmp_path, "desktop_open")
@@ -302,18 +316,19 @@ def test_text_like_evaluate_deferred_until_pending_text_read(
     )
     monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
 
-    action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
+    open_output, open_meta = action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
     output, meta = action_evaluate(
         tmp_path,
         paths,
         {"action": "evaluate", "profile": "example", "code": "document.body.innerText"},
     )
 
-    assert "evaluate_deferred=true" in output
-    assert meta["required_next_tool_call"]["action"] == "read_artifact"
+    assert open_meta["recommended_next_action"] == "page_markdown"
+    assert "RAW_EVAL_DISABLED" in output
+    assert meta["suggested_next_action"]["action"] == "page_markdown"
 
 
-def test_smart_read_and_find_text_use_pending_text_file(
+def test_smart_read_and_find_text_can_use_explicit_legacy_text_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     paths = _paths(tmp_path, "desktop_open")
@@ -330,11 +345,11 @@ def test_smart_read_and_find_text_use_pending_text_file(
     )
     monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
 
-    action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
+    _open_output, open_meta = action_desktop_open(tmp_path, paths, {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"})
     output, meta = action_find_text(
         tmp_path,
         paths,
-        {"action": "find_text", "profile": "example", "query": "27.06.26"},
+        {"action": "find_text", "profile": "example", "query": "27.06.26", "path": open_meta["text_file"]},
     )
 
     assert "find_text_ok=true" in output
@@ -342,7 +357,7 @@ def test_smart_read_and_find_text_use_pending_text_file(
     assert meta["find_text_used"] is True
     assert meta["artifact_filter_matches"] == 1
 
-    output, meta = action_smart_read(tmp_path, paths, {"action": "smart_read", "profile": "example", "mode": "tail"})
+    output, meta = action_smart_read(tmp_path, paths, {"action": "smart_read", "profile": "example", "mode": "tail", "path": open_meta["text_file"]})
     assert "smart_read_ok=true" in output
     assert meta["smart_read_used"] is True
 

@@ -18,6 +18,7 @@ from agent_browser_skill.core.artifacts import auto_cleanup_if_needed, path_size
 from agent_browser_skill.core import locks as core_locks
 from agent_browser_skill.core.output import cap_output, load_request, pid_running, redact, workspace_root
 from agent_browser_skill.core.paths import paths_for, remembered_url
+from agent_browser_skill.core.workflow import workflow_gate_guard_response
 from agent_browser_skill.core.structured_logs import append_tool_log, make_run_id
 from agent_browser_skill.errors import BrowserBusyError, ToolError
 from agent_browser_skill.result import ToolResult
@@ -77,16 +78,33 @@ def _sanitize_message(message: str, root: Path) -> str:
 
 
 def _suggested_next_action(action: str, state: dict) -> str | None:
+    pending = state.get("pending_next_action")
+    if isinstance(pending, str) and pending:
+        return pending
     allowed = state.get("next_allowed_actions") or []
     if action in {"open", "open_page"}:
         return "wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None)
-    if action == "desktop_open":
+    if action in {"desktop_open", "desktop_snapshot"}:
+        if "page_markdown" in allowed:
+            return "page_markdown"
         return "scroll_until_stable" if "scroll_until_stable" in allowed else ("wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None))
     if action == "status" and state.get("phase") in {"READY", "LOADED"}:
         for candidate in ("get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
             if candidate in allowed:
                 return candidate
     return allowed[0] if allowed else None
+
+
+def _metadata_suggested_next_action(meta: dict, state: dict) -> str | None:
+    candidate = meta.get("recommended_next_action")
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None
+    candidate = candidate.strip()
+    allowed = state.get("next_allowed_actions") or []
+    if candidate in allowed:
+        return candidate
+    return None
+
 
 def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dict:
     meta = _sanitize_value(dict(payload.get("metadata") or {}), root)
@@ -103,7 +121,7 @@ def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dic
         "state": state,
         "error_code": None,
         "message": output,
-        "suggested_next_action": _suggested_next_action(action, state),
+        "suggested_next_action": _metadata_suggested_next_action(meta, state) or _suggested_next_action(action, state),
         "next_allowed_actions": state.get("next_allowed_actions") or [],
         "warnings": warnings,
     }
@@ -131,6 +149,42 @@ def _error_payload(
         "next_allowed_actions": state.get("next_allowed_actions") or [], "warnings": list(warnings or []), "error": message,
     }
 
+
+def _ensure_visible_markdown_guidance(output: str, action: str) -> str:
+    if action not in {"desktop_open", "desktop_snapshot"}:
+        return output
+    if "PRIMARY_NEXT_TOOL_CALL" in output and "next_tool_call" in output and "page_markdown" in output:
+        return output
+    from agent_browser_skill.actions_manual import _page_markdown_next_lines
+    return "\n".join([output, *_page_markdown_next_lines()])
+
+
+def _apply_pending_gate_to_state(state: dict, meta: dict, completed_action: str) -> None:
+    bw = meta.get("browser_workflow") if isinstance(meta.get("browser_workflow"), dict) else {}
+    pending_call = meta.get("required_next_tool_call") or bw.get("required_next_tool_call") or meta.get("next_tool_call") or bw.get("next_tool_call")
+    pending_action = meta.get("recommended_next_action") or bw.get("recommended_next_action")
+    if isinstance(pending_call, dict) and isinstance(pending_call.get("action"), str):
+        pending_action = pending_call.get("action")
+    if completed_action in {"desktop_open", "desktop_snapshot", "page_markdown"} and pending_action in {"page_markdown", "read_page_md"}:
+        state["pending_next_action"] = pending_action
+        state["pending_next_tool_call"] = pending_call if isinstance(pending_call, dict) else {"action": pending_action}
+    elif completed_action == "read_page_md":
+        state.pop("pending_next_action", None)
+        state.pop("pending_next_tool_call", None)
+
+
+
+def _state_for_error(root: Path | None, request: dict) -> dict:
+    if root is None:
+        return {}
+    raw = request.get("args") or {}
+    ctx = request.get("context") or {}
+    session_id = str(raw.get("session_id") or (ctx.get("session_id") if isinstance(ctx, dict) else None) or "default")
+    state = load_state(root, session_id)
+    profile = raw.get("profile") or raw.get("site_key")
+    if profile:
+        state["profile"] = str(profile)
+    return state
 
 def run_request(request: dict) -> dict:
     action = ""
@@ -204,6 +258,16 @@ def run_request(request: dict) -> dict:
             ):
                 cleanup_notes = auto_cleanup_if_needed(root)
                 paths = paths_for(root, args)
+                gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
+                if gated and requested_action in {"fetch_page", "run_command", "write_file", "run", "evaluate", "get_page_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_forum_posts", "find_text", "desktop_screenshot", "screenshot", "read_file"}:
+                    output, meta = gated
+                    base_meta = metadata(paths)
+                    base_meta.update(meta)
+                    state["pending_next_action"] = meta.get("recommended_next_action")
+                    state["pending_next_tool_call"] = meta.get("next_tool_call")
+                    state["next_allowed_actions"] = list(dict.fromkeys([str(meta.get("recommended_next_action") or "page_markdown"), *(state.get("next_allowed_actions") or [])]))
+                    payload = _unified_payload(ToolResult.ok(output, base_meta, status="blocked").to_payload(redact=redact, cap_output=cap_output), requested_action, state, root)
+                    return payload
                 busy = core_locks.guard_manual_browser_resource(
                     root,
                     paths,
@@ -273,6 +337,7 @@ def run_request(request: dict) -> dict:
                             core_locks.clear_manual_browser_lock(root)
                         raise
                     core_locks.release_manual_browser_if_needed(root, action, meta)
+        output = _ensure_visible_markdown_guidance(output, requested_action)
         if cleanup_notes and action != "cleanup":
             meta["auto_cleanup"] = {"removed_entries": len(cleanup_notes)}
             if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
@@ -294,7 +359,12 @@ def run_request(request: dict) -> dict:
         for key, prefix, state_key in (("text_file", "art", "artifact_id"), ("artifact_file", "art", "artifact_id"), ("snapshot_file", "snap", "last_snapshot_id"), ("screenshot", "snap", "last_snapshot_id")):
             if meta.get(key):
                 state[state_key] = opaque_id(meta[key], prefix)
+        if meta.get("artifact_id"):
+            state["artifact_id"] = meta["artifact_id"]
         state["next_allowed_actions"] = NEXT_ALLOWED.get(state.get("phase", "NEW"), NEXT_ALLOWED["NEW"])
+        _apply_pending_gate_to_state(state, meta, requested_action)
+        if state.get("pending_next_action"):
+            state["next_allowed_actions"] = list(dict.fromkeys([state["pending_next_action"], *state["next_allowed_actions"]]))
         if requested_action == "status" and state.get("phase") in {"READY", "LOADED"}:
             preferred = ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
             state["next_allowed_actions"] = list(dict.fromkeys([*preferred, *state["next_allowed_actions"]]))
@@ -326,7 +396,7 @@ def run_request(request: dict) -> dict:
         save_state(root, state)
         return _error_payload("VALIDATION_ERROR", str(exc), action or str((request.get("args") or {}).get("action") or ""), state, current_warnings)
     except subprocess.TimeoutExpired:
-        payload = _error_payload("INTERNAL_ERROR", "agent-browser command timed out", action, load_state(root, "default") if root else {}, current_warnings)
+        payload = _error_payload("INTERNAL_ERROR", "agent-browser command timed out", action, _state_for_error(root, request), current_warnings)
         if root is not None:
             append_tool_log(
                 root,
@@ -360,7 +430,7 @@ def run_request(request: dict) -> dict:
             )
         return payload
     except ToolError as exc:
-        payload = _error_payload(_classify_error(str(exc)), str(exc), action, load_state(root, "default") if root else {}, current_warnings)
+        payload = _error_payload(_classify_error(str(exc)), str(exc), action, _state_for_error(root, request), current_warnings)
         if root is not None:
             append_tool_log(
                 root,
@@ -375,7 +445,7 @@ def run_request(request: dict) -> dict:
             )
         return payload
     except Exception as exc:
-        payload = _error_payload("INTERNAL_ERROR", f"{type(exc).__name__}: {exc}", action, load_state(root, "default") if root else {}, current_warnings)
+        payload = _error_payload("INTERNAL_ERROR", f"{type(exc).__name__}: {exc}", action, _state_for_error(root, request), current_warnings)
         if root is not None:
             append_tool_log(
                 root,
