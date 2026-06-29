@@ -141,6 +141,30 @@ def test_desktop_open_guides_data_extraction_before_screenshot(monkeypatch: pyte
     assert meta["recommended_followup_after_read"]["action"] == "navigate_pagination"
 
 
+def test_desktop_open_bootstrap_preserves_markdown_first_guidance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: False)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.action_manual_desktop",
+        lambda root, p, args: ("manual desktop started", {"manual_desktop_active": True}),
+    )
+
+    output, meta = action_desktop_open(
+        tmp_path,
+        paths,
+        {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum"},
+    )
+
+    assert "desktop_open_started_manual_desktop=true" in output
+    assert "PRIMARY_NEXT_TOOL_CALL" in output
+    assert "page_markdown" in output
+    assert meta["recommended_next_action"] == "page_markdown"
+    assert meta["next_tool_call"]["action"] == "page_markdown"
+
+
 def test_desktop_snapshot_guides_read_artifact_before_screenshot(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -301,7 +325,7 @@ def test_text_like_evaluate_points_to_typed_markdown_workflow(
 
     assert open_meta["recommended_next_action"] == "page_markdown"
     assert "RAW_EVAL_DISABLED" in output
-    assert meta["suggested_next_action"]["action"] == "get_page_text"
+    assert meta["suggested_next_action"]["action"] == "page_markdown"
 
 
 def test_smart_read_and_find_text_can_use_explicit_legacy_text_file(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-GENERIC_BROWSER_CONTENT_ACTIONS = {"run_command", "read_file", "list_directory"}
+GENERIC_BROWSER_CONTENT_ACTIONS = {"run_command", "read_file", "list_directory", "fetch_page", "write_file"}
 PROTECTED_PATH_PATTERNS = (
     re.compile(r"/workspace(?:/[^\s'\"]*)?"),
     re.compile(r"/data/skills/agent-browser(?:/[^\s'\"]*)?"),
@@ -11,15 +11,20 @@ PROTECTED_PATH_PATTERNS = (
 )
 COMMAND_LIKE_PATTERNS = (
     re.compile(r"\bfind\s+/workspace\b", re.I),
-    re.compile(r"\bcurl\b[^\n]*(?:4pda|/workspace|browser-artifacts)", re.I),
+    re.compile(r"\bcurl\b[^\n]*(?:https?://|4pda|/workspace|browser-artifacts)", re.I),
     re.compile(r"\bpip(?:3)?\s+install\b", re.I),
     re.compile(r"\bpython3?\s+<<\s*['\"]?PYEOF['\"]?", re.I),
 )
 BROWSER_CONTENT_ACTIONS = [
-    "wait_ready",
+    "page_markdown",
+    "read_page_md",
     "read_artifact_by_id",
     "search_artifact",
     "read_artifact_slice",
+    "click_handle",
+    "fill_handle",
+    "select_handle",
+    "wait_ready",
     "get_page_text",
     "find_text",
     "extract_forum_posts",
@@ -86,10 +91,18 @@ def protected_browser_content_request(action: str, args: dict[str, Any]) -> tupl
 def next_action_for_blocked(action: str, args: dict[str, Any], state: dict[str, Any]) -> str:
     text = "\n".join(_flatten_strings(args)).lower()
     allowed = state.get("next_allowed_actions") or []
-    if "4pda" in text or "forum" in text:
-        return "extract_forum_posts"
+    artifact_id = str(state.get("artifact_id") or "")
+    markdown_known = artifact_id.startswith("md_") or state.get("phase") == "MARKDOWN_READY"
+    if markdown_known:
+        for candidate in ("read_page_md", "read_artifact_by_id", "search_artifact"):
+            if candidate in allowed or candidate in BROWSER_CONTENT_ACTIONS:
+                return candidate
+    if "page_markdown" in allowed or state.get("phase") in {"READY", "LOADED", "EXTRACTED"}:
+        return "page_markdown"
     if "browser-artifacts" in text or action in {"read_file", "list_directory"}:
         return "read_artifact_by_id" if "read_artifact_by_id" in allowed else "search_artifact"
+    if "4pda" in text or "forum" in text:
+        return "page_markdown"
     if state.get("phase") in {"OPENED", "NEW"}:
         return "wait_ready"
     return allowed[0] if allowed else BROWSER_CONTENT_ACTIONS[0]

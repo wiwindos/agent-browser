@@ -8,6 +8,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from agent_browser_skill.core.action_schemas import save_state
 from agent_browser_skill.runner import run_request
 
 
@@ -24,7 +25,7 @@ def test_active_browser_blocks_generic_tools_with_normalized_result(tmp_path: Pa
         assert out["action"] == action
         assert out["session_id"] == "browser-session"
         assert out["state"]["session_id"] == "browser-session"
-        assert out["suggested_next_action"] in out["next_allowed_actions"] or out["suggested_next_action"] in {"read_artifact_by_id", "search_artifact"}
+        assert out["suggested_next_action"] in out["next_allowed_actions"] or out["suggested_next_action"] in {"page_markdown", "read_artifact_by_id", "search_artifact"}
 
 
 def test_active_browser_blocks_protected_paths_and_command_like_requests(tmp_path: Path) -> None:
@@ -40,7 +41,28 @@ def test_active_browser_blocks_protected_paths_and_command_like_requests(tmp_pat
         out = _run(tmp_path, args)
         assert out["error_code"] == "BLOCKED"
         assert out["ok"] is False
-        assert out["suggested_next_action"] in {"wait_ready", "read_artifact_by_id", "search_artifact", "extract_forum_posts", "open_page"}
+        assert out["suggested_next_action"] in {"page_markdown", "wait_ready", "read_artifact_by_id", "search_artifact", "open_page"}
+
+
+def test_blocked_forum_and_fetch_recover_to_markdown(tmp_path: Path) -> None:
+    save_state(
+        tmp_path,
+        {
+            "session_id": "browser-session",
+            "profile": "4pda.to",
+            "current_url": "https://4pda.to/forum/index.php?showtopic=1",
+            "phase": "READY",
+        },
+    )
+
+    for args in [
+        {"action": "run", "task": "curl https://4pda.to/forum/index.php?showtopic=1"},
+        {"action": "fetch_page", "url": "https://4pda.to/forum/index.php?showtopic=1"},
+        {"action": "write_file", "path": str(tmp_path / "parse_4pda.py"), "content": "import urllib.request"},
+    ]:
+        out = _run(tmp_path, args)
+        assert out["error_code"] == "BLOCKED"
+        assert out["suggested_next_action"] == "page_markdown"
 
 
 def test_debug_admin_can_bypass_active_browser_policy_to_existing_action(tmp_path: Path, monkeypatch) -> None:
@@ -106,7 +128,8 @@ def test_browser_sequence_returns_structured_guidance_not_shell(tmp_path: Path, 
         assert out["suggested_next_action"] not in {"run", "run_command", "read_file", "shell"}
 
     assert results[0]["state"]["phase"] == "READY"
-    assert results[0]["suggested_next_action"] == "scroll_until_stable"
+    assert results[0]["suggested_next_action"] == "page_markdown"
+    assert results[1]["suggested_next_action"] == "page_markdown"
     assert results[2]["state"]["phase"] == "READY"
     assert results[2]["suggested_next_action"] == "wait_ready"
     assert results[3]["suggested_next_action"] == "get_page_text"
