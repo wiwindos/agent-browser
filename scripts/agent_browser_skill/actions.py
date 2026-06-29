@@ -38,6 +38,7 @@ from agent_browser_skill.actions_manual import (
     action_stop_desktop,
 )
 from agent_browser_skill.actions_saby import action_saby_tenders_csv
+from agent_browser_skill.actions_artifacts import action_list_artifacts, action_read_artifact_by_id, action_read_artifact_slice, action_search_artifact
 from agent_browser_skill.core.output import metadata
 
 ACTIONS = {
@@ -59,6 +60,10 @@ ACTIONS = {
     "desktop_screenshot": action_desktop_screenshot,
     "evaluate": action_evaluate,
     "read_artifact": action_read_artifact,
+    "read_artifact_by_id": action_read_artifact_by_id,
+    "search_artifact": action_search_artifact,
+    "read_artifact_slice": action_read_artifact_slice,
+    "list_artifacts": action_list_artifacts,
     "smart_read": action_smart_read,
     "find_text": action_find_text,
     "navigate_pagination": action_navigate_pagination,
