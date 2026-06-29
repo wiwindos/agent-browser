@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
   "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, smart_read, find_text, navigate_pagination, downloads, and saby_tenders_csv.",
-  "version": "0.3.67",
+  "version": "0.3.68",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",
@@ -46,6 +46,26 @@
               "read_artifact",
               "smart_read",
               "find_text",
+              "wait_ready",
+              "scroll_until_stable",
+              "get_page_text",
+              "get_title",
+              "extract_links",
+              "extract_blocks",
+              "extract_article",
+              "extract_table",
+              "extract_search_results",
+              "extract_updates_by_date",
+              "extract_forum_posts",
+              "filter_by_date",
+              "summarize_posts",
+              "read_artifact_by_id",
+              "search_artifact",
+              "read_artifact_slice",
+              "list_artifacts",
+              "summarize_artifact",
+              "click_text",
+              "click_selector",
               "navigate_pagination",
               "downloads",
               "saby_tenders_csv",
@@ -316,6 +336,38 @@
           "context_lines": {
             "type": "integer",
             "description": "For read_artifact query/regex: number of surrounding lines to include around each match. Defaults to 3, max 20."
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "4pda",
+              "generic_forum"
+            ],
+            "description": "For extract_forum_posts: forum adapter, defaults to auto; 4pda uses stable selectors and pagination hints."
+          },
+          "date_filter": {
+            "type": "string",
+            "description": "For extract_forum_posts: optional normalized date filter such as yesterday or today."
+          },
+          "artifact_id": {
+            "type": "string",
+            "description": "Opaque artifact ID returned by list_artifacts/extract_forum_posts for artifact APIs."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "For read_artifact_slice: character offset."
+          },
+          "post_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For read_artifact_slice: select forum posts by post_id instead of a character slice."
+          },
+          "stable_rounds": {
+            "type": "integer",
+            "description": "For scroll_until_stable: number of unchanged scroll rounds before considering the page loaded."
           }
         },
         "required": [

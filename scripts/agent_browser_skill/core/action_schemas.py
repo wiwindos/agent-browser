@@ -15,7 +15,7 @@ NEXT_ALLOWED = {
     "OPENED": ["wait_ready", "screenshot", "desktop_open"],
     "READY": ["wait_ready", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
     "LOADED": ["wait_ready", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
-    "EXTRACTED": ["search_artifact", "read_artifact_slice", "list_artifacts", "filter_by_date", "summarize_posts"],
+    "EXTRACTED": ["search_artifact", "read_artifact_slice", "list_artifacts", "filter_by_date", "summarize_posts", "summarize_artifact"],
     "ANSWER_READY": ["list_artifacts", "open_page", "desktop_open"],
     "DONE": ["open_page", "desktop_open", "list_artifacts"],
 }
@@ -45,10 +45,10 @@ SCHEMAS: dict[str, Schema] = {
     "find_text": Schema({"query": Field(str), "regex": Field(str), "artifact_id": Field(str), "context_lines": Field(int, False, 5, min_value=0, max_value=20), "max_chars": Field(int, False, 12000, min_value=100, max_value=12000)}, {"text": "query"}),
     "read_artifact_by_id": Schema({"artifact_id": Field(str, True), "mode": Field(str, False, "head", {"head", "tail"}), "max_chars": Field(int, False, 1200, min_value=100, max_value=12000), "query": Field(str), "regex": Field(str), "context_lines": Field(int, False, 3, min_value=0, max_value=20)}, {"text": "query"}),
     "search_artifact": Schema({"artifact_id": Field(str, True), "query": Field(str), "regex": Field(str), "context_lines": Field(int, False, 3, min_value=0, max_value=20), "max_chars": Field(int, False, 12000, min_value=100, max_value=12000)}, {"text": "query"}),
-    "read_artifact_slice": Schema({"artifact_id": Field(str, True), "offset": Field(int, False, 0, min_value=0), "length": Field(int, False, 4000, min_value=1, max_value=12000)}),
+    "read_artifact_slice": Schema({"artifact_id": Field(str, True), "offset": Field(int, False, 0, min_value=0), "limit": Field(int, False, 4000, min_value=1, max_value=12000), "length": Field(int, min_value=1, max_value=12000), "post_ids": Field((list, str))}),
     "list_artifacts": Schema({"limit": Field(int, False, 20, min_value=1, max_value=200), "profile": Field(str)}),
     "screenshot": Schema({"filename": Field(str), "full_page": Field(bool, False, False), "force": Field(bool, False, False)}),
-    "scroll_until_stable": Schema({"max_scrolls": Field(int, False, 30, min_value=1, max_value=200), "pause_ms": Field(int, False, 600, min_value=100, max_value=5000), "timeout": Field((int, float), False, 30, min_value=1, max_value=300)}),
+    "scroll_until_stable": Schema({"max_scrolls": Field(int, False, 30, min_value=1, max_value=200), "stable_rounds": Field(int, False, 2, min_value=1, max_value=20), "pause_ms": Field(int, False, 600, min_value=100, max_value=5000), "timeout": Field((int, float), False, 30, min_value=1, max_value=300)}),
     "get_page_text": Schema({"max_chars": Field(int, False, 6000, min_value=100, max_value=20000)}),
     "get_title": Schema({}),
     "extract_links": Schema({"max_links": Field(int, False, 100, min_value=1, max_value=1000)}),
@@ -60,9 +60,10 @@ SCHEMAS: dict[str, Schema] = {
     "extract_table": Schema({}),
     "extract_search_results": Schema({}),
     "extract_updates_by_date": Schema({"date": Field(str, False, "yesterday")}),
-    "extract_forum_posts": Schema({"adapter": Field(str, False, "auto", {"auto", "4pda", "generic_forum"})}),
+    "extract_forum_posts": Schema({"adapter": Field(str, False, "auto", {"auto", "4pda", "generic_forum"}), "date_filter": Field(str), "limit": Field(int, False, 50, min_value=1, max_value=500)}),
     "filter_by_date": Schema({"date": Field(str, False, "yesterday"), "posts": Field((list, dict, str), True)}),
     "summarize_posts": Schema({"posts": Field((list, dict, str), True)}),
+    "summarize_artifact": Schema({"artifact_id": Field(str, True), "query": Field(str)}),
 }
 ACTION_ALIASES = {"open_page": "open"}
 
@@ -164,8 +165,9 @@ def phase_after(action: str, success: bool, meta: dict[str, Any]) -> str | None:
     if action == "desktop_open": return "READY" if meta.get("text_file") else "OPENED"
     if action == "desktop_snapshot": return "READY" if meta.get("text_file") else "OPENED"
     if action in {"wait_ready", "wait"}: return "READY"
+    if action == "scroll_until_stable": return "LOADED"
     if action in {"read_artifact_by_id", "read_artifact", "search_artifact", "read_artifact_slice", "find_text", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date"}: return "EXTRACTED"
-    if action in {"summarize_posts"}: return "ANSWER_READY"
+    if action in {"summarize_posts", "summarize_artifact"}: return "ANSWER_READY"
     return None
 
 
