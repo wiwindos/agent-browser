@@ -159,6 +159,50 @@ def pending_text_read(root: Path, paths: dict[str, Path]) -> dict[str, Any] | No
     return None
 
 
+
+def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str | None = None) -> dict[str, Any]:
+    return {
+        "primary_loop": [
+            "desktop_open",
+            "page_markdown",
+            "reason_over_markdown_and_ui_handles",
+            "click_handle/fill_handle/select_handle or other focused action",
+            "page_markdown_after_each_page_changing_action",
+        ],
+        "read_primary_source": "Read the Markdown snapshot artifact first; use query/regex against it for dates and target text.",
+        "artifact_id": artifact_id,
+        "markdown_file": markdown_file,
+        "after_page_change": {"action": "page_markdown"},
+        "bounded_autonomy": {
+            "max_page_changing_steps": 8,
+            "if_not_found": "try pagination, filters, show/load more controls, or scroll_until_stable before returning a partial result",
+            "stop_condition": "answer when evidence is found or report partial result after bounded attempts",
+        },
+        "specialized_extractors": "Optional fast path only when Markdown shows the page matches article/table/search/date/forum patterns.",
+    }
+
+
+def remember_pending_markdown_read(root: Path, paths: dict[str, Path], *, markdown_file: Path, elements_file: Path | None = None, artifact_id: str | None = None, current_url: Any = None, title: Any = None, max_chars: int = 3000) -> dict[str, Any]:
+    state = load_workflow_state(root, paths)
+    read_call = {"action": "read_artifact", "path": str(markdown_file), "max_chars": max_chars}
+    state.update({
+        "workflow_state": "needs_markdown_read",
+        "pending_next_action": "read_artifact",
+        "pending_next_tool_call": read_call,
+        "last_markdown_file": str(markdown_file),
+        "last_markdown_artifact_id": artifact_id or "",
+        "last_elements_file": str(elements_file or ""),
+        "last_text_file": str(markdown_file),
+        "last_url": str(current_url or ""),
+        "last_title": str(title or ""),
+        "page_kind": "markdown_page",
+        "text_artifact_read": False,
+        "markdown_workflow_active": True,
+    })
+    state.setdefault("artifact_reads", {})
+    save_workflow_state(root, paths, state)
+    return state
+
 def duplicate_read_guard(
     root: Path,
     paths: dict[str, Path],
