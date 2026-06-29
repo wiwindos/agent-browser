@@ -42,7 +42,7 @@ def test_selector_for_handle_uses_stable_data_attribute():
 
 import json
 
-from agent_browser_skill.actions_manual import action_click_handle, action_fill_handle
+from agent_browser_skill.actions_manual import action_click_handle, action_fill_handle, action_read_page_md
 from agent_browser_skill.core.paths import paths_for
 from agent_browser_skill.core.workflow import remember_pending_markdown_read
 
@@ -73,3 +73,20 @@ def test_click_and_fill_handle_resolve_latest_mapping(monkeypatch, tmp_path):
     assert calls[-1][1]["selector"] == '[data-agent-browser-handle="input:1"]'
     assert calls[-1][1]["text"] == "abc"
     assert meta["recommended_next_action"] == "page_markdown"
+
+
+def test_read_page_md_reads_latest_markdown_artifact(tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "handles"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({"elements": []}), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"
+    md.write_text("# Page\n\nUseful Markdown", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping, artifact_id="md_test")
+
+    out, meta = action_read_page_md(tmp_path, paths, {"action": "read_page_md", "max_chars": 1000})
+
+    assert "read_page_md_ok=true" in out
+    assert "Useful Markdown" in out
+    assert meta["read_page_md_used"] is True
+    assert meta["artifact_id"] == "md_test"

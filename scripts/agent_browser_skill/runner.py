@@ -80,13 +80,27 @@ def _suggested_next_action(action: str, state: dict) -> str | None:
     allowed = state.get("next_allowed_actions") or []
     if action in {"open", "open_page"}:
         return "wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None)
-    if action == "desktop_open":
+    if action in {"desktop_open", "desktop_snapshot"}:
+        if "page_markdown" in allowed:
+            return "page_markdown"
         return "scroll_until_stable" if "scroll_until_stable" in allowed else ("wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None))
     if action == "status" and state.get("phase") in {"READY", "LOADED"}:
         for candidate in ("get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
             if candidate in allowed:
                 return candidate
     return allowed[0] if allowed else None
+
+
+def _metadata_suggested_next_action(meta: dict, state: dict) -> str | None:
+    candidate = meta.get("recommended_next_action")
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None
+    candidate = candidate.strip()
+    allowed = state.get("next_allowed_actions") or []
+    if candidate in allowed:
+        return candidate
+    return None
+
 
 def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dict:
     meta = _sanitize_value(dict(payload.get("metadata") or {}), root)
@@ -103,7 +117,7 @@ def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dic
         "state": state,
         "error_code": None,
         "message": output,
-        "suggested_next_action": _suggested_next_action(action, state),
+        "suggested_next_action": _metadata_suggested_next_action(meta, state) or _suggested_next_action(action, state),
         "next_allowed_actions": state.get("next_allowed_actions") or [],
         "warnings": warnings,
     }
@@ -294,6 +308,8 @@ def run_request(request: dict) -> dict:
         for key, prefix, state_key in (("text_file", "art", "artifact_id"), ("artifact_file", "art", "artifact_id"), ("snapshot_file", "snap", "last_snapshot_id"), ("screenshot", "snap", "last_snapshot_id")):
             if meta.get(key):
                 state[state_key] = opaque_id(meta[key], prefix)
+        if meta.get("artifact_id"):
+            state["artifact_id"] = meta["artifact_id"]
         state["next_allowed_actions"] = NEXT_ALLOWED.get(state.get("phase", "NEW"), NEXT_ALLOWED["NEW"])
         if requested_action == "status" and state.get("phase") in {"READY", "LOADED"}:
             preferred = ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]

@@ -184,10 +184,10 @@ def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str 
 
 def remember_pending_markdown_read(root: Path, paths: dict[str, Path], *, markdown_file: Path, elements_file: Path | None = None, artifact_id: str | None = None, current_url: Any = None, title: Any = None, max_chars: int = 3000) -> dict[str, Any]:
     state = load_workflow_state(root, paths)
-    read_call = {"action": "read_artifact", "path": str(markdown_file), "max_chars": max_chars}
+    read_call = {"action": "read_page_md", "max_chars": max_chars}
     state.update({
         "workflow_state": "needs_markdown_read",
-        "pending_next_action": "read_artifact",
+        "pending_next_action": "read_page_md",
         "pending_next_tool_call": read_call,
         "last_markdown_file": str(markdown_file),
         "last_markdown_artifact_id": artifact_id or "",
