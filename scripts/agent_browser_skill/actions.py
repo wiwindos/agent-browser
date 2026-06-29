@@ -46,7 +46,7 @@ from agent_browser_skill.actions_manual import (
     action_stop_desktop,
 )
 from agent_browser_skill.actions_saby import action_saby_tenders_csv
-from agent_browser_skill.actions_artifacts import action_list_artifacts, action_read_artifact_by_id, action_read_artifact_slice, action_search_artifact
+from agent_browser_skill.actions_artifacts import action_list_artifacts, action_read_artifact_by_id, action_read_artifact_slice, action_search_artifact, action_summarize_artifact
 from agent_browser_skill.actions_extractors import (
     action_extract_article, action_extract_table, action_extract_search_results, action_extract_updates_by_date,
     action_extract_forum_posts, action_filter_by_date, action_summarize_posts,
@@ -75,6 +75,7 @@ ACTIONS = {
     "read_artifact_by_id": action_read_artifact_by_id,
     "search_artifact": action_search_artifact,
     "read_artifact_slice": action_read_artifact_slice,
+    "summarize_artifact": action_summarize_artifact,
     "list_artifacts": action_list_artifacts,
     "smart_read": action_smart_read,
     "find_text": action_find_text,

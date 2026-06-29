@@ -9,6 +9,7 @@ from pathlib import Path
 
 from agent_browser_skill.actions import ACTIONS, metadata
 from agent_browser_skill.core.action_schemas import NEXT_ALLOWED, ValidationError, load_state, normalize_and_validate, opaque_id, phase_after, save_state
+from agent_browser_skill.core.tool_policy import BROWSER_CONTENT_ACTIONS, next_action_for_blocked, protected_browser_content_request
 from agent_browser_skill.browser.desktop import manual_desktop_running
 from agent_browser_skill.core.args import bool_arg, lock_wait_seconds_from
 from agent_browser_skill.core.config import LOCKLESS_ACTIONS, MANUAL_BROWSER_ACQUIRE_ACTIONS
@@ -74,10 +75,25 @@ def _sanitize_message(message: str, root: Path) -> str:
     return re.sub(root_s + r"/[^\s,]+", lambda m: opaque_id(m.group(0), "art"), message)
 
 
+
+def _suggested_next_action(action: str, state: dict) -> str | None:
+    allowed = state.get("next_allowed_actions") or []
+    if action in {"open", "open_page"}:
+        return "wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None)
+    if action == "desktop_open":
+        return "scroll_until_stable" if "scroll_until_stable" in allowed else ("wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None))
+    if action == "status" and state.get("phase") in {"READY", "LOADED"}:
+        for candidate in ("get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
+            if candidate in allowed:
+                return candidate
+    return allowed[0] if allowed else None
+
 def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dict:
     meta = _sanitize_value(dict(payload.get("metadata") or {}), root)
-    warnings = list(meta.pop("warnings", []) or [])
+    warnings = list(meta.get("warnings", []) or [])
     output = _sanitize_message(str(payload.get("output") or ""), root)
+    if not output.strip():
+        output = f"{action} completed" if payload.get("success") else f"{action} failed"
     sid = state.get("session_id") or "default"
     unified = {
         "success": bool(payload.get("success")),
@@ -87,7 +103,7 @@ def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dic
         "state": state,
         "error_code": None,
         "message": output,
-        "suggested_next_action": (state.get("next_allowed_actions") or [None])[0],
+        "suggested_next_action": _suggested_next_action(action, state),
         "next_allowed_actions": state.get("next_allowed_actions") or [],
         "warnings": warnings,
     }
@@ -96,13 +112,22 @@ def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dic
     return unified
 
 
-def _error_payload(code: str, message: str, action: str, state: dict, warnings: list[str] | None = None) -> dict:
+def _error_payload(
+    code: str,
+    message: str,
+    action: str,
+    state: dict,
+    warnings: list[str] | None = None,
+    *,
+    suggested_next_action: str | None = None,
+) -> dict:
     state = dict(state or {})
     state.setdefault("next_allowed_actions", [])
     state["last_error"] = message
+    suggested = suggested_next_action or _suggested_next_action(action, state)
     return {
         "success": False, "ok": False, "action": action, "session_id": state.get("session_id", "default"),
-        "state": state, "error_code": code, "message": message, "suggested_next_action": (state.get("next_allowed_actions") or [None])[0],
+        "state": state, "error_code": code, "message": message, "suggested_next_action": suggested,
         "next_allowed_actions": state.get("next_allowed_actions") or [], "warnings": list(warnings or []), "error": message,
     }
 
@@ -120,6 +145,29 @@ def run_request(request: dict) -> dict:
         args, validation_warnings, action = normalize_and_validate(raw_args)
         current_warnings = list(validation_warnings)
         requested_action = str(args.get("_requested_action") or action)
+        session_id = str(args.get("session_id") or args.get("_context", {}).get("session_id") or "default")
+        state = load_state(root, session_id)
+        blocked, block_message = protected_browser_content_request(requested_action, args)
+        if blocked:
+            state["next_allowed_actions"] = list(dict.fromkeys([*BROWSER_CONTENT_ACTIONS, *(state.get("next_allowed_actions") or [])]))
+            suggested = next_action_for_blocked(requested_action, args, state)
+            if suggested not in state["next_allowed_actions"]:
+                state["next_allowed_actions"].insert(0, suggested)
+            payload = _error_payload("BLOCKED", block_message or "blocked by active browser session policy", requested_action, state, current_warnings, suggested_next_action=suggested)
+            append_tool_log(
+                root,
+                {
+                    "event": "request_finished",
+                    "run_id": run_id,
+                    "action": requested_action,
+                    "success": False,
+                    "duration_ms": int((time.time() - started) * 1000),
+                    "error_code": "BLOCKED",
+                    "error": payload.get("error"),
+                    "policy": "active_browser_session",
+                },
+            )
+            return payload
         if action not in ACTIONS:
             if action == "send_file":
                 raise ToolError(
@@ -128,8 +176,6 @@ def run_request(request: dict) -> dict:
                     "For screenshots use action=desktop_screenshot, then send the saved file with the platform file tool outside agent-browser."
                 )
             raise ToolError(f"unknown action: {action}")
-        session_id = str(args.get("session_id") or args.get("_context", {}).get("session_id") or "default")
-        state = load_state(root, session_id)
         append_tool_log(
             root,
             {
@@ -249,6 +295,9 @@ def run_request(request: dict) -> dict:
             if meta.get(key):
                 state[state_key] = opaque_id(meta[key], prefix)
         state["next_allowed_actions"] = NEXT_ALLOWED.get(state.get("phase", "NEW"), NEXT_ALLOWED["NEW"])
+        if requested_action == "status" and state.get("phase") in {"READY", "LOADED"}:
+            preferred = ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
+            state["next_allowed_actions"] = list(dict.fromkeys([*preferred, *state["next_allowed_actions"]]))
         state["last_error"] = None
         save_state(root, state)
         payload = ToolResult.ok(output, meta).to_payload(redact=redact, cap_output=cap_output)

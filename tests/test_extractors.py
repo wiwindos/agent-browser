@@ -74,3 +74,35 @@ def test_summarize_posts_separate_structured_step() -> None:
     summary = summarize_posts([{"post_id": "1", "author": "A", "datetime_iso": "2026-06-28T10:00:00+00:00", "text": "First sentence. Details."}])
     assert summary["posts"][0]["post_id"] == "1"
     assert summary["summary"].startswith("Structured 1 posts")
+
+
+def test_golden_4pda_yesterday_flow_uses_artifact_api(monkeypatch, tmp_path: Path) -> None:
+    calls = []
+
+    def fake_action(root, paths, args):
+        calls.append(args["action"])
+        if args["action"] == "extract_forum_posts":
+            artifact = tmp_path / "browser-artifacts" / "p" / "logs" / "forum-posts.json"
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_text(json.dumps({"posts": [{"post_id": "entry589", "author": "User", "datetime_raw": "Вчера, 10:02 |#589", "datetime_iso": "2026-06-28T10:02:00+00:00", "text": "Новое в agent-browser", "links": [], "short_summary": "Новое в agent-browser"}]}, ensure_ascii=False), encoding="utf-8")
+            return "forum-posts_ok=true\nartifact_id: art_x\ncount: 1\npreview: []", {"artifact_file": str(artifact), "snapshot_file": str(artifact), "goal_status": "answer_ready"}
+        if args["action"] == "read_artifact_slice":
+            return "cached_artifact_read=true\nartifact_id: art_x", {"artifact_id": "art_x", "cached": True}
+        if args["action"] == "summarize_artifact":
+            return "summarize_artifact_ok=true\ncount: 1", {"artifact_id": "art_x", "goal_status": "answer_ready"}
+        return "ok", {"goal_status": "ok"}
+
+    monkeypatch.setattr("agent_browser_skill.runner.ACTIONS", {k: fake_action for k in ["open", "wait_ready", "scroll_until_stable", "extract_forum_posts", "read_artifact_slice", "summarize_artifact"]})
+    scenario = [
+        {"action": "open_page", "profile": "4pda", "url": "https://4pda.to/forum/index.php?showtopic=1111836"},
+        {"action": "wait_ready", "profile": "4pda"},
+        {"action": "scroll_until_stable", "profile": "4pda", "max_scrolls": 5, "stable_rounds": 2, "timeout": 10},
+        {"action": "extract_forum_posts", "profile": "4pda", "adapter": "4pda", "date_filter": "yesterday", "limit": 50},
+        {"action": "summarize_artifact", "profile": "4pda", "artifact_id": "art_x", "query": "agent-browser"},
+    ]
+    for args in scenario:
+        out = run_request({"args": args, "context": {"cwd": str(tmp_path), "session_id": "4pda-golden"}})
+        assert out["success"] is True
+    assert calls == ["open", "wait_ready", "scroll_until_stable", "extract_forum_posts", "summarize_artifact"]
+    forbidden = {"run_command", "curl", "pip install", "evaluate", "read_file"}
+    assert not forbidden.intersection(calls)

@@ -1223,7 +1223,7 @@ def action_wait_ready(root: Path, paths: dict[str, Path], args: dict[str, Any]) 
 
 def action_scroll_until_stable(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     timeout = timeout_from(args)
-    script = _json_script({"maxScrolls": int_arg(args, "max_scrolls", 30, 1, 200), "pauseMs": int_arg(args, "pause_ms", 600, 100, 5000)}, """
+    script = _json_script({"maxScrolls": int_arg(args, "max_scrolls", 30, 1, 200), "stableRounds": int_arg(args, "stable_rounds", 2, 1, 20), "pauseMs": int_arg(args, "pause_ms", 600, 100, 5000)}, """
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const height = () => Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
   const textLen = () => (document.body?.innerText || '').length;
@@ -1232,7 +1232,7 @@ def action_scroll_until_stable(root: Path, paths: dict[str, Path], args: dict[st
   let scrollCount = 0;
   let stableRounds = 0;
   let newContentDetected = false;
-  for (; scrollCount < args.maxScrolls && stableRounds < 2; scrollCount++) {
+  for (; scrollCount < args.maxScrolls && stableRounds < args.stableRounds; scrollCount++) {
     window.scrollTo(0, height());
     await sleep(args.pauseMs);
     const nextHeight = height();
@@ -1242,10 +1242,13 @@ def action_scroll_until_stable(root: Path, paths: dict[str, Path], args: dict[st
     else stableRounds = 0;
     lastHeight = nextHeight; lastTextLen = nextTextLen;
   }
-  return {stable: stableRounds >= 2, scroll_count: scrollCount, final_scroll_height: lastHeight, new_content_detected: newContentDetected};
+  return {stable: stableRounds >= args.stableRounds, stable_rounds: stableRounds, scroll_count: scrollCount, final_scroll_height: lastHeight, text_length: lastTextLen, new_content_detected: newContentDetected, url: location.href, title: document.title};
 """)
     result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script, timeout=timeout)
-    return _typed_page_summary(root, paths, "scroll_until_stable", result)
+    snap = write_json_artifact(root, paths, "scroll-stable-snapshot", result if isinstance(result, dict) else {"result": result})
+    out, meta = _typed_page_summary(root, paths, "scroll_until_stable", result)
+    meta.update({"snapshot_file": str(snap), "snapshot_id": __import__("agent_browser_skill.core.action_schemas", fromlist=["opaque_id"]).opaque_id(snap, "snap"), "current_url": (result or {}).get("url") if isinstance(result, dict) else None})
+    return out + f"\nsnapshot_id: {meta['snapshot_id']}", meta
 
 
 def action_get_title(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
