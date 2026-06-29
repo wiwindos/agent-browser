@@ -1,0 +1,16 @@
+{
+  "name": "snitchmd-pi",
+  "private": true,
+  "description": "Pi skill for fetching web pages as Markdown through snitchmd.",
+  "keywords": [
+    "pi-package",
+    "snitchmd",
+    "web-fetch",
+    "markdown"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}
