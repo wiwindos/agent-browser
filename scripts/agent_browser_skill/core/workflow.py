@@ -181,12 +181,19 @@ def duplicate_read_guard(
     next_call = None
     if state.get("page_kind") == "forum_thread":
         next_call = {"action": "navigate_pagination", "target": "last"}
+    required_call = next_call or {"action": "read_artifact", "path": str(artifact_file), "query": "<target text/date>", "context_lines": 5}
     return {
         "duplicate_read_detected": True,
         "duplicate_read_count": count,
         "recommended_next_action": "navigate_pagination" if next_call else "read_artifact",
-        "next_tool_call": next_call
-        or {"action": "read_artifact", "path": str(artifact_file), "query": "<target text/date>", "context_lines": 5},
+        "next_tool_call": required_call,
+        "required_next_tool_call": required_call,
+        "blocked_actions": ["desktop_screenshot", "evaluate", "read_file", "run_command"],
+        "constraints": {
+            "do_not_retry_same_artifact_without_filter": True,
+            "do_not_change_max_chars_to_bypass_guard": True,
+            "use_query_regex_or_pagination": True,
+        },
     }
 
 

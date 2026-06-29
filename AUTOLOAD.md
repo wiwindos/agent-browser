@@ -15,8 +15,10 @@ Empty snapshot fallback:
 - Do not call `screenshot` just to recover from an empty snapshot unless the user explicitly asked for an image or diagnostics.
 Forum/date extraction:
 - If the user asks what was new yesterday/on a specific date, keep navigating and reading artifacts until you extract dated posts/items for that date; do not answer with only "opened the page" or a screenshot.
-- After `desktop_open`/`desktop_snapshot`, follow the exact `next_tool_call`/`text_file` path with `read_artifact`, then use `navigate_pagination`, links/buttons, or in-page search to reach the relevant date. Do not use screenshots, `read_file`, `run_command`, raw `fetch_page`, large raw `evaluate`, or `action=run` as substitutes for extracting page text.
-- For date/forum searches, use `read_artifact query=<date>` or `read_artifact regex=<pattern> context_lines=<n>` instead of repeatedly reading large excerpts.
+- After `desktop_open`/`desktop_snapshot`, copy and follow the exact returned `next_tool_call`/`text_file` path with `read_artifact` as the immediate next call. Do not pass the artifact run directory while an exact `text_file` is available.
+- After the first exact text read, search dates only with `read_artifact query=<date>` or `read_artifact regex=<pattern> context_lines=<n>`; do not repeatedly read large excerpts or change `max_chars` to bypass duplicate-read guards.
+- If the target date is not found on the current page, use `navigate_pagination target=last|next|prev|first`, then read the new exact `text_file` and search again. Stop after bounded attempts with an honest partial result instead of exhausting the step limit.
+- Do not use screenshots, `read_file`, `run_command`, raw `fetch_page`, large raw `evaluate`, or `action=run` as substitutes for extracting page text.
 - If the exact `text_file` path has fallen out of context, use `smart_read` or `find_text`; they continue from the active browser workflow state.
 Hard rules:
 - Do not use shell commands for browser work.

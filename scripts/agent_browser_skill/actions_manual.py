@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import json
@@ -50,6 +50,37 @@ def _state_summary_lines(prefix: str, state: dict[str, Any], state_file: Path, t
 
 def _browser_state_output(prefix: str, state: dict[str, Any], state_file: Path, text_file: Path, challenge: bool) -> str:
     return "\n".join(_state_summary_lines(prefix, state, state_file, text_file, challenge))
+
+
+def _pending_text_directory_guard(root: Path, paths: dict[str, Path], target: Path) -> tuple[str, dict[str, Any]] | None:
+    pending = pending_text_read(root, paths)
+    if not pending or not target.is_dir():
+        return None
+    next_call = dict(pending["pending_next_tool_call"])
+    meta = {
+        "workflow_state": "blocked_until_exact_text_read",
+        "guard_reason": "artifact directory was passed while an exact pending text_file must be read first",
+        "recommended_next_action": next_call.get("action"),
+        "next_tool_call": next_call,
+        "required_next_tool_call": next_call,
+        "last_text_file": pending.get("last_text_file"),
+        "page_kind": pending.get("page_kind"),
+        "constraints": {
+            "must_read_exact_text_file_first": True,
+            "do_not_use_artifact_directory_while_text_file_is_pending": True,
+        },
+    }
+    output = "\n".join(
+        [
+            "read_artifact_directory_deferred=true",
+            "guard_reason: artifact directory was passed while an exact pending text_file must be read first",
+            f"artifact_directory: {target}",
+            f"pending_text_file: {pending.get('last_text_file')}",
+            "next_step: call read_artifact with the exact pending text_file path; do not pass the artifact run directory while text_file is available",
+            "required_next_tool_call: " + json.dumps(next_call, ensure_ascii=False),
+        ]
+    )
+    return output, meta
 
 
 TEXT_EXTRACTION_FORBIDDEN_ACTIONS = [
@@ -998,8 +1029,11 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
             ]
             if challenge_detected
             else [
-                "next_step: read the exact text_file with action=read_artifact before screenshots, raw evaluate, or other fallbacks; then continue with desktop_snapshot, navigate_pagination, or site controls until the requested page data is extracted",
+                "MANDATORY_NEXT_TOOL_CALL: " + json.dumps({"action": "read_artifact", "path": str(text_file), "max_chars": 3000}, ensure_ascii=False),
+                "DO_NOT_USE_DIRECTORY_PATH_WHILE_TEXT_FILE_IS_AVAILABLE: " + str(paths["artifact"]),
+                "next_step: read the exact text_file with action=read_artifact before screenshots, raw evaluate, or other fallbacks; then search dates with query/regex and continue with desktop_snapshot, navigate_pagination, or site controls until the requested page data is extracted",
                 "next_tool_call: " + json.dumps({"action": "read_artifact", "path": str(text_file), "max_chars": 3000}, ensure_ascii=False),
+                "forum_date_workflow: after the first exact text read, use read_artifact query/regex for the target date; if not found, use navigate_pagination target=last|next|prev and read the new exact text_file; stop after bounded attempts with an honest partial result",
                 "do_not_use_for_text_extraction: desktop_screenshot, read_file, run_command, raw fetch_page, large raw evaluate, action=run",
             ]
         )
@@ -1073,6 +1107,9 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
         raise ToolError(f"artifact file not found: {target}")
     original_directory: Path | None = None
     if target.is_dir():
+        guarded_directory = _pending_text_directory_guard(root, paths, target)
+        if guarded_directory:
+            return guarded_directory
         target, original_directory = _resolve_artifact_target(target)
     if not target.is_file():
         raise ToolError("read_artifact requires a file path, not a directory")
@@ -1118,6 +1155,8 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
                 f"artifact_mode: {mode}",
                 f"duplicate_read_count: {duplicate_guard['duplicate_read_count']}",
                 "next_step: avoid rereading the same large artifact; use query/regex or navigate pagination",
+                "do_not_retry: do not call read_artifact on this same path again without query/regex, and do not change max_chars to bypass this guard",
+                "required_next_tool_call: " + json.dumps(duplicate_guard["required_next_tool_call"], ensure_ascii=False),
                 "next_tool_call: " + json.dumps(duplicate_guard["next_tool_call"], ensure_ascii=False),
             ]
         )

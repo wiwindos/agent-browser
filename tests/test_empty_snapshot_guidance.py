@@ -213,6 +213,40 @@ def test_navigate_pagination_guides_read_artifact_after_navigation(
     assert meta["next_tool_call"]["path"].endswith("pagination-last-state-text.txt")
 
 
+
+
+def test_read_artifact_directory_deferred_when_exact_text_read_pending(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _paths(tmp_path, "desktop_open")
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.desktop_navigate", lambda args, url: None)
+    monkeypatch.setattr(
+        "agent_browser_skill.actions_manual.desktop.desktop_page_state",
+        lambda args: {
+            "url": "https://example.com/forum/index.php?showtopic=1",
+            "title": "Forum",
+            "htmlLength": 123,
+            "text": "27.06.26 target post",
+        },
+    )
+    monkeypatch.setattr("agent_browser_skill.actions_manual.desktop.state_needs_manual_action", lambda state: False)
+
+    _open_output, open_meta = action_desktop_open(
+        tmp_path,
+        paths,
+        {"action": "desktop_open", "profile": "example", "url": "https://example.com/forum/index.php?showtopic=1"},
+    )
+    output, meta = action_read_artifact(tmp_path, paths, {"action": "read_artifact", "path": str(paths["artifact"])})
+
+    assert "read_artifact_directory_deferred=true" in output
+    assert "required_next_tool_call:" in output
+    assert "do not pass the artifact run directory" in output
+    assert meta["workflow_state"] == "blocked_until_exact_text_read"
+    assert meta["required_next_tool_call"] == open_meta["required_next_tool_call"]
+    assert meta["required_next_tool_call"]["path"].endswith("desktop-open-state-text.txt")
+
+
 def test_read_artifact_query_returns_matching_context(tmp_path: Path) -> None:
     paths = _paths(tmp_path, "read_artifact")
     text_file = paths["logs"] / "posts.txt"
@@ -324,7 +358,11 @@ def test_duplicate_read_artifact_is_deferred_after_first_large_read(tmp_path: Pa
 
     assert "artifact_read_ok=true" in first
     assert "duplicate_artifact_read_deferred=true" in second
+    assert "required_next_tool_call:" in second
+    assert "do_not_retry" in second
     assert meta["duplicate_read_detected"] is True
+    assert meta["required_next_tool_call"] == meta["next_tool_call"]
+    assert meta["constraints"]["do_not_change_max_chars_to_bypass_guard"] is True
 
 
 def test_unknown_send_file_action_explains_platform_boundary(tmp_path: Path) -> None:
