@@ -47,6 +47,10 @@ from agent_browser_skill.actions_manual import (
 )
 from agent_browser_skill.actions_saby import action_saby_tenders_csv
 from agent_browser_skill.actions_artifacts import action_list_artifacts, action_read_artifact_by_id, action_read_artifact_slice, action_search_artifact
+from agent_browser_skill.actions_extractors import (
+    action_extract_article, action_extract_table, action_extract_search_results, action_extract_updates_by_date,
+    action_extract_forum_posts, action_filter_by_date, action_summarize_posts,
+)
 from agent_browser_skill.core.output import metadata
 
 ACTIONS = {
@@ -80,6 +84,13 @@ ACTIONS = {
     "get_title": action_get_title,
     "extract_links": action_extract_links,
     "extract_blocks": action_extract_blocks,
+    "extract_article": action_extract_article,
+    "extract_table": action_extract_table,
+    "extract_search_results": action_extract_search_results,
+    "extract_updates_by_date": action_extract_updates_by_date,
+    "extract_forum_posts": action_extract_forum_posts,
+    "filter_by_date": action_filter_by_date,
+    "summarize_posts": action_summarize_posts,
     "click_text": action_click_text,
     "click_selector": action_click_selector,
     "navigate_pagination": action_navigate_pagination,
