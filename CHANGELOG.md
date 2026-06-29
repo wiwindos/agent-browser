@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.68
+
+- Added typed minimal vertical forum actions: `wait_ready`, `scroll_until_stable`, `extract_forum_posts`, `read_artifact_slice`, and `summarize_artifact`.
+- Added a 4PDA forum-post extractor that handles `Вчера, 10:02 |#589` headers, `st=` pagination links, compact previews, and artifact-backed post reads without returning raw HTML.
+- Added duplicate slice-read cache warnings and golden coverage for the 4PDA “what was new yesterday” happy path without shell, curl, pip install, direct HTML reads, or raw `evaluate`.
+
 ## 0.3.67
 
 - Added per-profile browser workflow state so `desktop_open`/`desktop_snapshot` remember the pending exact `text_file` read across subsequent actions.
