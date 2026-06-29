@@ -30,6 +30,14 @@ from agent_browser_skill.actions_manual import (
     action_downloads,
     action_evaluate,
     action_find_text,
+    action_wait_ready,
+    action_scroll_until_stable,
+    action_get_page_text,
+    action_get_title,
+    action_extract_links,
+    action_extract_blocks,
+    action_click_text,
+    action_click_selector,
     action_manual_desktop,
     action_navigate_pagination,
     action_read_artifact,
@@ -38,6 +46,11 @@ from agent_browser_skill.actions_manual import (
     action_stop_desktop,
 )
 from agent_browser_skill.actions_saby import action_saby_tenders_csv
+from agent_browser_skill.actions_artifacts import action_list_artifacts, action_read_artifact_by_id, action_read_artifact_slice, action_search_artifact
+from agent_browser_skill.actions_extractors import (
+    action_extract_article, action_extract_table, action_extract_search_results, action_extract_updates_by_date,
+    action_extract_forum_posts, action_filter_by_date, action_summarize_posts,
+)
 from agent_browser_skill.core.output import metadata
 
 ACTIONS = {
@@ -59,8 +72,27 @@ ACTIONS = {
     "desktop_screenshot": action_desktop_screenshot,
     "evaluate": action_evaluate,
     "read_artifact": action_read_artifact,
+    "read_artifact_by_id": action_read_artifact_by_id,
+    "search_artifact": action_search_artifact,
+    "read_artifact_slice": action_read_artifact_slice,
+    "list_artifacts": action_list_artifacts,
     "smart_read": action_smart_read,
     "find_text": action_find_text,
+    "wait_ready": action_wait_ready,
+    "scroll_until_stable": action_scroll_until_stable,
+    "get_page_text": action_get_page_text,
+    "get_title": action_get_title,
+    "extract_links": action_extract_links,
+    "extract_blocks": action_extract_blocks,
+    "extract_article": action_extract_article,
+    "extract_table": action_extract_table,
+    "extract_search_results": action_extract_search_results,
+    "extract_updates_by_date": action_extract_updates_by_date,
+    "extract_forum_posts": action_extract_forum_posts,
+    "filter_by_date": action_filter_by_date,
+    "summarize_posts": action_summarize_posts,
+    "click_text": action_click_text,
+    "click_selector": action_click_selector,
     "navigate_pagination": action_navigate_pagination,
     "downloads": action_downloads,
     "saby_tenders_csv": action_saby_tenders_csv,
