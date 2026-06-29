@@ -13,9 +13,9 @@ PHASES = ["NEW", "OPENED", "READY", "LOADED", "EXTRACTED", "ANSWER_READY", "DONE
 NEXT_ALLOWED = {
     "NEW": ["open_page", "desktop_open", "list_artifacts"],
     "OPENED": ["wait_ready", "screenshot", "desktop_open"],
-    "READY": ["get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
-    "LOADED": ["wait_ready", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
-    "EXTRACTED": ["search_artifact", "read_artifact_slice", "list_artifacts"],
+    "READY": ["get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
+    "LOADED": ["wait_ready", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
+    "EXTRACTED": ["search_artifact", "read_artifact_slice", "list_artifacts", "filter_by_date", "summarize_posts"],
     "ANSWER_READY": ["list_artifacts", "open_page", "desktop_open"],
     "DONE": ["open_page", "desktop_open", "list_artifacts"],
 }
@@ -55,6 +55,13 @@ SCHEMAS: dict[str, Schema] = {
     "click_text": Schema({"text": Field(str), "query": Field(str)}),
     "click_selector": Schema({"selector": Field(str, True)}),
     "evaluate": Schema({"script": Field(str), "code": Field(str), "text": Field(str), "allow_unsafe_eval": Field(bool, False, False), "force": Field(bool, False, False)}),
+    "extract_article": Schema({}),
+    "extract_table": Schema({}),
+    "extract_search_results": Schema({}),
+    "extract_updates_by_date": Schema({"date": Field(str, False, "yesterday")}),
+    "extract_forum_posts": Schema({"adapter": Field(str, False, "auto", {"auto", "4pda", "generic_forum"})}),
+    "filter_by_date": Schema({"date": Field(str, False, "yesterday"), "posts": Field((list, dict, str), True)}),
+    "summarize_posts": Schema({"posts": Field((list, dict, str), True)}),
 }
 ACTION_ALIASES = {"open_page": "open"}
 
@@ -154,7 +161,8 @@ def phase_after(action: str, success: bool, meta: dict[str, Any]) -> str | None:
     if not success: return None
     if action in {"open_page", "open", "desktop_open"}: return "LOADED" if meta.get("text_file") or meta.get("snapshot_file") else "OPENED"
     if action in {"wait_ready", "wait"}: return "READY"
-    if action in {"read_artifact_by_id", "read_artifact", "search_artifact", "read_artifact_slice", "find_text"}: return "EXTRACTED"
+    if action in {"read_artifact_by_id", "read_artifact", "search_artifact", "read_artifact_slice", "find_text", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date"}: return "EXTRACTED"
+    if action in {"summarize_posts"}: return "ANSWER_READY"
     return None
 
 
