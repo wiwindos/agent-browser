@@ -27,9 +27,10 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Direct Saby export: `desktop_open profile=saby url=...` -> `saby_tenders_csv profile=saby mode=yesterday`.
 - Manual confirmation follow-up after a browser handoff: call `continue_after_manual` on the same `profile` and `url`. Do not require an exact confirmation word.
 - If `snapshot`, `desktop_snapshot`, `desktop_open`, or `evaluate` returns `*_file` paths, use `read_artifact` to inspect the protected full content instead of `read_file`, `run_command`, or large raw `evaluate` dumps. For date-based/forum tasks, follow the exact `next_tool_call`/`text_file` path with `read_artifact`, then use page controls, `navigate_pagination`, or in-page search to locate the requested date before answering.
+- An exact returned `text_file` has priority over the artifact run directory. Do not pass the artifact directory to `read_artifact` while a `text_file` path is present or pending. Directory reads are only a fallback when no exact `*_file` path is available.
 - If you need to read/search the current page but do not have the exact artifact path in context, use `smart_read` or `find_text`; they reuse the active `text_file` from the current browser workflow.
-- If tool metadata contains `required_next_tool_call`, treat it as mandatory unless the user explicitly changes the task or the page shows a challenge. Do not substitute screenshot, raw evaluate, shell, or repeated artifact-directory reads for that call.
-- For date/forum extraction, prefer `read_artifact query=<date>` or `read_artifact regex=<pattern> context_lines=<n>` over repeatedly reading large head excerpts.
+- If tool metadata contains `required_next_tool_call`, treat it as mandatory unless the user explicitly changes the task or the page shows a challenge. Do not substitute screenshot, raw evaluate, shell, repeated artifact-directory reads, or `max_chars` changes for that call.
+- For date/forum extraction, use `read_artifact query=<date>` or `read_artifact regex=<pattern> context_lines=<n>` after the first exact text read. If no match is found, use `navigate_pagination`, read the new exact `text_file`, and search again with bounded attempts.
 - When a manual desktop session is already active for the same profile, generic actions like `open`, `snapshot`, `click`, `fill`, and `wait` should stay on the live desktop session instead of starting a second Chrome daemon.
 
 ## Hard Rules
