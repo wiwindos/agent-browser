@@ -62,7 +62,7 @@ def test_selector_for_handle_uses_stable_data_attribute():
 
 import json
 
-from agent_browser_skill.actions_manual import action_click_handle, action_fill_handle, action_read_page_md
+from agent_browser_skill.actions_manual import action_click_handle, action_fill_handle, action_page_markdown_act, action_read_page_md
 from agent_browser_skill.core.paths import paths_for
 from agent_browser_skill.core.workflow import remember_pending_markdown_read
 
@@ -110,3 +110,29 @@ def test_read_page_md_reads_latest_markdown_artifact(tmp_path):
     assert "Useful Markdown" in out
     assert meta["read_page_md_used"] is True
     assert meta["artifact_id"] == "md_test"
+
+
+def test_page_markdown_act_resolves_node_acts_and_refreshes_markdown(monkeypatch, tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "nodes"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({
+        "metadata": {"revision": 3},
+        "elements": [{"node_id": "button:1", "handle": "button:1", "selector": '[data-agent-browser-handle="button:1"]'}],
+    }), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"
+    md.write_text("# Page", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping)
+
+    calls = []
+    monkeypatch.setattr("agent_browser_skill.actions_manual.action_click", lambda root, p, args: (calls.append(args) or ("clicked", {"clicked": True})))
+    monkeypatch.setattr("agent_browser_skill.actions_manual.action_page_markdown", lambda root, p, args: ("page_markdown_ok=true\n# Refreshed", {"revision": 4, "artifact_id": "md_refreshed"}))
+
+    out, meta = action_page_markdown_act(tmp_path, paths, {"action": "page_markdown.act", "node_id": "button:1", "node_action": "click", "revision": 3, "settle_seconds": 0})
+
+    assert "page_markdown_act_ok=true" in out
+    assert "action_page_markdown:" in out
+    assert "# Refreshed" in out
+    assert calls[-1]["selector"] == '[data-agent-browser-handle="button:1"]'
+    assert meta["page_markdown_act_used"] is True
+    assert meta["revision"] == 4

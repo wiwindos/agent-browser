@@ -80,7 +80,7 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 - `actions.py` — central action registry/dispatcher glue.
 - `actions_generic.py` — generic page/browser actions such as open, snapshot, click, fill, wait, and extraction helpers.
 - `actions_auth.py` — login/session/profile authentication actions.
-- `actions_manual.py` — manual desktop/noVNC/challenge handoff actions.
+- `actions_manual.py` — manual desktop/noVNC/challenge handoff actions, Markdown-node action cycle (`page_markdown.act`), and Markdown artifact reads.
 - `actions_maintenance.py` — status, cleanup, close, recover, and maintenance actions.
 - `actions_artifacts.py` — protected browser-artifact read/list/search helpers.
 - `actions_extractors.py` — typed content extraction actions.
