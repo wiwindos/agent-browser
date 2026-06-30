@@ -19,7 +19,7 @@ Manual desktop actions:
 - `desktop_open`: navigate the already-running desktop Chrome through CDP; starts manual desktop if needed.
 - `desktop_snapshot`: return URL, title, and visible text from desktop Chrome.
 - `desktop_screenshot`: save a screenshot from desktop Chrome.
-- `page_markdown` / `page_markdown.get`: extract the current desktop Chrome page as Markdown with stable `node_id` values and a revisioned action map.
+- `page_markdown` / `page_markdown.get`: extract the current desktop Chrome page as Markdown with revision-scoped `node_id` values, live-state signatures, and a revisioned action map.
 - `read_page_md`: read the latest Markdown page artifact.
 - `page_markdown.act`: perform `click`, `fill`, `type`, `select`, or `submit` against a Markdown `node_id`, wait/settle, then return the refreshed `action_page_markdown` in the same response. Pass `node_action` (or `operation`/`act`), `node_id`, optional `revision`, and `text`/`value` for input actions.
 - `click_handle` / `fill_handle` / `select_handle`: legacy handle actions retained for compatibility; prefer `page_markdown.act` for new Markdown-first workflows.

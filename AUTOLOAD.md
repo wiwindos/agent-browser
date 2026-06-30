@@ -2,8 +2,8 @@ Use this skill only for explicit browser automation, live site interaction, Saby
 First tool: `skill_agent-browser_browser`.
 Primary universal workflow:
 - Start interactive tasks with `action=desktop_open` (or `open` -> `wait_ready` for simple pages), then call `action=page_markdown`.
-- Read the Markdown with `action=read_page_md` when prompted; reason over page content and UI `node_id` values yourself.
-- Choose the needed `node_id` and call `action=page_markdown.act node_id=<id> node_action=click|fill|type|select|submit revision=<revision>`.
+- Read the Markdown with `action=read_page_md` when prompted; reason over page content and revision-scoped UI `node_id` values yourself.
+- Choose the needed revision-scoped `node_id` and call `action=page_markdown.act node_id=<id> node_action=click|fill|type|select|submit revision=<revision>`.
 - Use the refreshed `action_page_markdown` returned by `page_markdown.act` as the next state, and repeat until solved.
 - This is the main workflow for catalogs, forums, search pages, tables, personal accounts, SPAs, and “next/show more/load more” controls.
 - Specialized extractors (`extract_table`, `extract_search_results`, `extract_updates_by_date`, `extract_forum_posts`, etc.) are optional fast paths only after Markdown inspection shows they fit; do not make them the primary workflow.

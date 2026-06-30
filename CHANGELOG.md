@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.75
+
+- Hardened Markdown-first workflow gates so pending `page_markdown`/`read_page_md` steps block legacy action escape hatches with `BLOCKED_PENDING_WORKFLOW_GATE`.
+- Blocked default `action=run` usage unless explicitly requested for debug/legacy mode.
+- Added live page signatures to Markdown mappings so `page_markdown.act` detects page changes that happen before a new Markdown revision is built.
+- Updated `read_page_md` guidance to point directly to a templated `page_markdown.act` next call and clarified that Markdown node IDs are revision-scoped.
+
 ## 0.3.74
 
 - Removed the obsolete vendored `snitchmd-master/` upstream snapshot from the repository.

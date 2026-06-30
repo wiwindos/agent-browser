@@ -178,3 +178,42 @@ def test_page_markdown_act_blocks_ambiguous_rebind(tmp_path):
 
     with pytest.raises(ToolError, match="BLOCKED_AMBIGUOUS_REBIND"):
         action_page_markdown_act(tmp_path, paths, {"action": "page_markdown.act", "node_id": "button:1", "node_action": "click", "revision": 1})
+
+
+def test_read_page_md_recommends_page_markdown_act_template(tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "handles"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({"metadata": {"revision": 9}, "elements": []}), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"
+    md.write_text("# Page\n\n[button:1] Go", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping, artifact_id="md_test")
+
+    _out, meta = action_read_page_md(tmp_path, paths, {"action": "read_page_md", "max_chars": 1000})
+
+    assert meta["recommended_next_action"] == "page_markdown.act"
+    assert meta["next_tool_call"] == {
+        "action": "page_markdown.act",
+        "node_id": "<choose_from_markdown>",
+        "node_action": "click|fill|type|select|submit",
+        "revision": "<current_revision>",
+    }
+
+
+def test_page_markdown_act_blocks_changed_live_signature(monkeypatch, tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "nodes"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({
+        "metadata": {
+            "revision": 1,
+            "live_signature": {"url": "https://example.test", "title": "Before", "readyState": "complete", "body_text_hash": "1", "dom_node_count": 10, "timestamp": 100},
+        },
+        "elements": [{"node_id": "button:1", "handle": "button:1", "selector": "button"}],
+    }), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"; md.write_text("# Page", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping)
+    monkeypatch.setattr("agent_browser_skill.actions_manual.cdp.cdp_eval", lambda *a, **k: {"url": "https://example.test", "title": "After", "readyState": "complete", "body_text_hash": "2", "dom_node_count": 11, "timestamp": 200})
+
+    with pytest.raises(ToolError, match="BLOCKED_STALE_PAGE"):
+        action_page_markdown_act(tmp_path, paths, {"action": "page_markdown.act", "node_id": "button:1", "node_action": "click", "revision": 1})
