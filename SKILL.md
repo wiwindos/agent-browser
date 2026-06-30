@@ -13,6 +13,7 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Empty or unusable snapshot: if `snapshot_ok=true` but `refs_count=0`, `title=(unknown)`, or useful page text is missing, read the exact returned `snapshot_file` with `read_artifact`; if still unusable, use `desktop_open` -> `desktop_snapshot` on the same profile/url before trying `screenshot`.
 - Authenticated site: use `login` with a stable `profile`; see `reference/auth-and-profiles.md`.
 - Manual desktop or classic noVNC: use `manual_desktop` or `desktop_open`; see `reference/manual-desktop-and-novnc.md`.
+- Markdown-node interaction: after `desktop_open`, call `page_markdown`, read/choose a `node_id`, then use `page_markdown.act node_id=<id> node_action=click|fill|type|select|submit revision=<revision>`; it performs the DOM action and immediately returns refreshed page Markdown. Prefer this over `@eN`, raw selectors, or legacy handle actions.
 - Captcha or Cloudflare handoff: use `challenge_detected`, wait for the user, then `continue_after_manual`; see `reference/manual-desktop-and-novnc.md`.
 - Protected browser artifacts: use `read_artifact` instead of `read_file` or shell commands.
 - Thread/forum pagination: use `navigate_pagination target=last|next|prev|first` instead of raw `evaluate` when possible. For requests like "what was new yesterday", continue navigating/reading until you extract posts dated yesterday; do not stop after only opening the page or sending a screenshot.

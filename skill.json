@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
   "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, smart_read, find_text, navigate_pagination, downloads, and saby_tenders_csv.",
-  "version": "0.3.70",
+  "version": "0.3.71",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",
@@ -50,6 +50,7 @@
               "fill_handle",
               "click_handle",
               "read_page_md",
+              "page_markdown.act",
               "page_markdown.get",
               "page_markdown",
               "wait_ready",
@@ -374,6 +375,32 @@
           "stable_rounds": {
             "type": "integer",
             "description": "For scroll_until_stable: number of unchanged scroll rounds before considering the page loaded."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "For page_markdown.act: Markdown node_id to act on, e.g. button:1, link:2, input:1."
+          },
+          "node_action": {
+            "type": "string",
+            "enum": [
+              "click",
+              "fill",
+              "type",
+              "select",
+              "submit"
+            ],
+            "description": "For page_markdown.act: operation to perform against node_id before returning refreshed page Markdown."
+          },
+          "revision": {
+            "description": "For page_markdown.act: optional page_markdown revision guard from the Markdown snapshot used to choose node_id."
+          },
+          "value": {
+            "type": "string",
+            "description": "For page_markdown.act select/fill/type: value to enter or select; text is also accepted."
+          },
+          "settle_seconds": {
+            "type": "number",
+            "description": "For page_markdown.act: seconds to wait after the DOM action before refreshing Markdown. Defaults to 1."
           }
         },
         "required": [

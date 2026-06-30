@@ -5,6 +5,7 @@ Preferred starts:
 - Saby/SBIS: `profile=saby`, then `action=desktop_open` or `action=saby_tenders_csv`.
 - Saby subscription export: prefer `action=saby_tenders_csv profile=saby subscription_text=<left menu text> mode=yesterday`; do not manually click the sidebar if the text is known.
 - Existing browser artifact path: `action=read_artifact`.
+- Markdown-node action cycle: after `desktop_open`, call `page_markdown`, choose a `node_id`, then call `page_markdown.act` with `node_action=click|fill|type|select|submit` and optional `revision`; it always returns refreshed Markdown after the action.
 Snapshot artifact rule:
 - When a browser action returns `snapshot_file`, `state_file`, `text_file`, or any `*_file`, pass that exact file path to `action=read_artifact`.
 - If tool metadata contains `required_next_tool_call`, execute it before any fallback unless the user changes the task or a challenge is visible.

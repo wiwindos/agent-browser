@@ -1578,7 +1578,7 @@ def _markdown_workflow_meta(markdown_file: Path | None = None, artifact_id: str 
         recommended_next_action="read_page_md" if markdown_file else "page_markdown",
         recommended_next_args={"max_chars": 3000} if markdown_file else {},
         next_tool_call={"action": "read_page_md", "max_chars": 3000} if markdown_file else {"action": "page_markdown"},
-        allowed_next_actions=["read_page_md", "read_artifact", "read_artifact_by_id", "click_handle", "fill_handle", "select_handle", "click_text", "click_selector", "scroll_until_stable", "navigate_pagination", "find_text", "search_artifact"],
+        allowed_next_actions=["read_page_md", "read_artifact", "read_artifact_by_id", "page_markdown.act", "click_handle", "fill_handle", "select_handle", "click_text", "click_selector", "scroll_until_stable", "navigate_pagination", "find_text", "search_artifact"],
         forbidden_next_actions=TEXT_EXTRACTION_FORBIDDEN_ACTIONS,
         artifact_policy={**TEXT_ARTIFACT_POLICY, "primary_artifact": "markdown", "artifact_id": artifact_id},
         context_policy={**TEXT_CONTEXT_POLICY, "read_markdown_before_acting": True, "reread_markdown_after_page_change": True},
@@ -1607,7 +1607,7 @@ def action_page_markdown(root: Path, paths: dict[str, Path], args: dict[str, Any
     meta.update({"manual_desktop_active": True, "current_url": snapshot["url"], "title": snapshot["title"], "markdown_file": str(md_file), "text_file": str(md_file), "artifact_id": artifact_id, "elements_file": str(elements_file), "elements_artifact_id": elements_id, "page_markdown_file": str(full_file), "revision": snapshot["revision"], "stable": snapshot["stable"], "content_md_length": len(snapshot["content_md"]), "ui_elements_count": len(snapshot["actionable_nodes"]), "warnings": snapshot.get("warnings") or []})
     meta.update(_markdown_workflow_meta(md_file, artifact_id))
     excerpt = snapshot["markdown"][:max_chars] + ("\n...[truncated; read markdown_file artifact for full content]" if len(snapshot["markdown"]) > max_chars else "")
-    return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and UI handles, act with click_handle/fill_handle/select_handle, then call page_markdown again after page changes", "next_tool_call: " + json.dumps({"action":"read_page_md","max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta
+    return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and UI node_id values, then use page_markdown.act for page-changing actions; it returns the refreshed Markdown", "next_tool_call: " + json.dumps({"action":"read_page_md","max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta
 
 
 def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -1631,13 +1631,13 @@ def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]
         "text_file": path,
         "artifact_id": artifact_id or meta.get("artifact_id"),
         "read_page_md_used": True,
-        "recommended_next_action": "click_handle",
-        "allowed_next_actions": ["click_handle", "fill_handle", "select_handle", "page_markdown", "search_artifact", "read_artifact_slice", "navigate_pagination", "scroll_until_stable", "extract_forum_posts", "summarize_artifact"],
+        "recommended_next_action": "page_markdown.act",
+        "allowed_next_actions": ["page_markdown.act", "click_handle", "fill_handle", "select_handle", "page_markdown", "search_artifact", "read_artifact_slice", "navigate_pagination", "scroll_until_stable", "extract_forum_posts", "summarize_artifact"],
         "next_tool_call": {"action": "page_markdown"},
         "markdown_first_policy": markdown_first_policy(artifact_id=artifact_id or None, markdown_file=path),
     })
     mark_pending_gate_completed(root, paths, "read_page_md")
-    return "read_page_md_ok=true\n" + output + "\nnext_step: choose a UI handle/action from the Markdown, or call page_markdown after any page-changing action", meta
+    return "read_page_md_ok=true\n" + output + "\nnext_step: choose a UI node_id/action from the Markdown and call page_markdown.act so the next response includes refreshed Markdown", meta
 
 
 def _load_last_handle(root: Path, paths: dict[str, Path], handle: str) -> dict[str, Any]:
@@ -1650,6 +1650,22 @@ def _load_last_handle(root: Path, paths: dict[str, Path], handle: str) -> dict[s
         if isinstance(el, dict) and el.get("handle") == handle:
             return el
     raise ToolError(f"handle not found in latest Markdown mapping: {handle}")
+
+
+def _load_last_node(root: Path, paths: dict[str, Path], node_id: str, revision: Any = None) -> dict[str, Any]:
+    workflow = load_workflow_state(root, paths)
+    path = str(workflow.get("last_elements_file") or "").strip()
+    if not path:
+        raise ToolError("no Markdown node mapping found; call page_markdown first")
+    data = json.loads(ensure_inside(Path(path), root).read_text(encoding="utf-8"))
+    metadata_obj = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    current_revision = metadata_obj.get("revision")
+    if revision is not None and str(revision).strip() and current_revision is not None and str(revision) != str(current_revision):
+        raise ToolError(f"stale page_markdown revision: requested {revision}, current {current_revision}; call page_markdown and retry with the current node_id")
+    for el in data.get("elements") or []:
+        if isinstance(el, dict) and (el.get("node_id") == node_id or el.get("handle") == node_id):
+            return el
+    raise ToolError(f"node_id not found in latest Markdown mapping: {node_id}")
 
 
 def action_click_handle(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -1694,3 +1710,62 @@ def action_select_handle(root: Path, paths: dict[str, Path], args: dict[str, Any
         raise ToolError(f"select_handle failed: {result.get('reason') if isinstance(result, dict) else 'unknown'}")
     meta = metadata(paths); meta.update({"manual_desktop_active": True, "handle": handle, "selector": selector}); meta.update(_markdown_workflow_meta(None, None))
     return "select_handle_ok=true\nhandle: " + handle + f"\nselector: {selector}\nnext_step: call page_markdown to refresh the Markdown snapshot after this page-changing action", meta
+
+
+def action_page_markdown_act(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    node_id = str(args.get("node_id") or args.get("handle") or "").strip()
+    op = str(args.get("node_action") or args.get("operation") or args.get("act") or "").strip().lower()
+    if not node_id:
+        raise ToolError("node_id is required for page_markdown.act")
+    if op not in {"click", "fill", "type", "select", "submit"}:
+        raise ToolError("page_markdown.act requires node_action/operation to be one of: click, fill, type, select, submit")
+    el = _load_last_node(root, paths, node_id, args.get("revision"))
+    selector = el.get("selector") or selector_for_handle(str(el.get("handle") or node_id))
+    action_output = ""
+    action_meta: dict[str, Any] = {}
+    if op == "click":
+        action_output, action_meta = action_click(root, paths, {**args, "selector": selector})
+    elif op in {"fill", "type"}:
+        text = str(args.get("text") if args.get("text") is not None else args.get("value") if args.get("value") is not None else "")
+        if text == "":
+            raise ToolError("text or value is required for fill/type")
+        action_output, action_meta = action_fill(root, paths, {**args, "selector": selector, "text": text})
+    elif op == "select":
+        value = str(args.get("value") if args.get("value") is not None else args.get("text") if args.get("text") is not None else "")
+        if value == "":
+            raise ToolError("value or text is required for select")
+        action_output, action_meta = action_select_handle(root, paths, {**args, "handle": str(el.get("handle") or node_id), "value": value})
+    elif op == "submit":
+        script = _json_script({"selector": selector}, """
+  const el = document.querySelector(args.selector);
+  if (!el) return {submitted:false, reason:'not_found'};
+  const form = el.tagName && el.tagName.toLowerCase() === 'form' ? el : el.closest('form');
+  if (!form) return {submitted:false, reason:'no_form'};
+  if (form.requestSubmit) form.requestSubmit(); else form.submit();
+  return {submitted:true};
+""")
+        result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script, timeout=timeout_from(args))
+        if not isinstance(result, dict) or not result.get("submitted"):
+            raise ToolError(f"submit failed: {result.get('reason') if isinstance(result, dict) else 'unknown'}")
+        action_meta = metadata(paths)
+        action_output = "submit_ok=true"
+    time.sleep(float(args.get("settle_seconds") or 1.0))
+    markdown_output, markdown_meta = action_page_markdown(root, paths, args)
+    markdown_meta.update({
+        "page_markdown_act_used": True,
+        "node_id": node_id,
+        "node_action": op,
+        "acted_selector": selector,
+        "previous_revision": args.get("revision"),
+        "action_result": action_meta,
+    })
+    return "\n".join([
+        "page_markdown_act_ok=true",
+        f"node_id: {node_id}",
+        f"node_action: {op}",
+        "action_result:",
+        cap_output(action_output, 2000),
+        "",
+        "action_page_markdown:",
+        markdown_output,
+    ]), markdown_meta

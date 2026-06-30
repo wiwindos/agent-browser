@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.71
+
+- Added `page_markdown.act` to perform click/fill/type/select/submit against Markdown `node_id` targets and return a refreshed `action_page_markdown` snapshot in the same action cycle.
+- Added revision-guarded Markdown node resolution plus workflow/schema/tool metadata so agents can prefer `node_id` actions over selectors and legacy handles.
+
 ## 0.3.70
 
 - Added the `PageMarkdownArtifact` runtime representation with revision, URL/title, Markdown, node/action maps, warnings, and stability metadata.
