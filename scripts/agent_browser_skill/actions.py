@@ -85,6 +85,7 @@ ACTIONS = {
     "smart_read": action_smart_read,
     "find_text": action_find_text,
     "page_markdown": action_page_markdown,
+    "page_markdown.get": action_page_markdown,
     "read_page_md": action_read_page_md,
     "click_handle": action_click_handle,
     "fill_handle": action_fill_handle,

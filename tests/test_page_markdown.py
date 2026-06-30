@@ -8,7 +8,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from agent_browser_skill.core.page_markdown import build_snapshot_from_dom, selector_for_handle
+from agent_browser_skill.core.page_markdown import build_page_markdown_artifact, build_snapshot_from_dom, selector_for_handle
 
 
 def test_markdown_snapshot_has_content_ui_and_mapping():
@@ -35,6 +35,26 @@ def test_markdown_snapshot_has_content_ui_and_mapping():
     assert "[link:1] Next -> https://example.test/page/2" in snap["ui_md"]
     assert snap["elements"][0]["selector"] == '[data-agent-browser-handle="input:1"]'
     assert snap["metadata"]["interactive_elements"] == 3
+
+
+def test_page_markdown_artifact_exposes_revision_nodes_warnings_and_stability():
+    artifact = build_page_markdown_artifact({
+        "revision": 7,
+        "url": "https://example.test",
+        "title": "Example",
+        "blocks": [{"kind": "paragraph", "text": "Readable"}],
+        "elements": [{"handle": "button:1", "tag": "button", "role": "button", "label": "Go"}],
+        "maxElements": 1,
+        "stable": True,
+    })
+
+    assert artifact.revision == 7
+    assert artifact.url == "https://example.test"
+    assert "Readable" in artifact.markdown
+    assert artifact.nodes[0]["node_id"] == "button:1"
+    assert artifact.actionable_nodes[0]["node_id"] == "button:1"
+    assert artifact.warnings == ["interactive element limit reached; action map may be incomplete"]
+    assert artifact.stable is False
 
 
 def test_selector_for_handle_uses_stable_data_attribute():
