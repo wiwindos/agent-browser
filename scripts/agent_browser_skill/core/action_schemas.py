@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from agent_browser_skill.errors import ToolError
 
-ERROR_CODES = {"VALIDATION_ERROR", "NAVIGATION_ERROR", "EXTRACTION_ERROR", "BLOCKED", "INTERNAL_ERROR"}
+ERROR_CODES = {"VALIDATION_ERROR", "NAVIGATION_ERROR", "EXTRACTION_ERROR", "BLOCKED", "BLOCKED_PENDING_WORKFLOW_GATE", "INTERNAL_ERROR"}
 PHASES = ["NEW", "OPENED", "READY", "LOADED", "MARKDOWN_READY", "EXTRACTED", "ANSWER_READY", "DONE"]
 NEXT_ALLOWED = {
     "NEW": ["open_page", "desktop_open", "list_artifacts"],
@@ -173,7 +173,7 @@ def phase_after(action: str, success: bool, meta: dict[str, Any]) -> str | None:
     if action in {"open_page", "open"}: return "READY" if meta.get("snapshot_file") else "OPENED"
     if action == "desktop_open": return "READY" if meta.get("text_file") else "OPENED"
     if action == "desktop_snapshot": return "READY" if meta.get("text_file") else "OPENED"
-    if action in {"page_markdown", "page_markdown.act"}: return "MARKDOWN_READY"
+    if action in {"page_markdown", "page_markdown.get", "page_markdown.act"}: return "MARKDOWN_READY"
     if action == "read_page_md": return "EXTRACTED"
     if action in {"wait_ready", "wait"}: return "READY"
     if action == "scroll_until_stable": return "LOADED"

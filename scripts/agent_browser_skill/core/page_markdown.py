@@ -140,9 +140,31 @@ def build_snapshot_from_dom(dom: dict[str, Any]) -> dict[str, Any]:
             "revision": artifact.revision,
             "stable": artifact.stable,
             "warnings": artifact.warnings,
+            "live_signature": dom.get("live_signature") if isinstance(dom.get("live_signature"), dict) else {},
         },
     })
     return data
+
+
+def live_signature_script() -> str:
+    return """
+(() => {
+  const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const text = clean((document.body && document.body.innerText) || '');
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return {
+    url: location.href,
+    title: document.title,
+    readyState: document.readyState,
+    body_text_hash: String(hash >>> 0),
+    dom_node_count: document.getElementsByTagName('*').length,
+    timestamp: Date.now()
+  };
+})()
+"""
 
 
 def dom_extraction_script(max_blocks: int = 220, max_elements: int = 250) -> str:
@@ -189,6 +211,10 @@ def dom_extraction_script(max_blocks: int = 220, max_elements: int = 250) -> str
     counters[kind] = (counters[kind] || 0) + 1; const handle = `${{kind}}:${{counters[kind]}}`; el.setAttribute('data-agent-browser-handle', handle);
     elements.push({{node_id: handle, handle, tag, role, text: clean(el.innerText || el.textContent), label: labelFor(el), href: el.href || null, selector: `[data-agent-browser-handle="${{handle}}"]`, fallback_selector: cssPath(el), bounding_box: box(el), visible: true, disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', input_type: el.type || null, value: ('value' in el ? String(el.value).slice(0,200) : null), placeholder: el.placeholder || null}});
   }}
-  return {{revision: window.__agentBrowserPageMarkdownRevision, url: location.href, title: document.title, blocks, elements, maxBlocks, maxElements, warnings: [], stable: document.readyState === 'complete'}};
+  const bodyText = clean((document.body && document.body.innerText) || '');
+  let bodyHash = 0;
+  for (let i = 0; i < bodyText.length; i++) bodyHash = ((bodyHash << 5) - bodyHash + bodyText.charCodeAt(i)) | 0;
+  const live_signature = {{url: location.href, title: document.title, readyState: document.readyState, body_text_hash: String(bodyHash >>> 0), dom_node_count: document.getElementsByTagName('*').length, timestamp: Date.now()}};
+  return {{revision: window.__agentBrowserPageMarkdownRevision, url: location.href, title: document.title, blocks, elements, maxBlocks, maxElements, warnings: [], stable: document.readyState === 'complete', live_signature}};
 }})()
 """

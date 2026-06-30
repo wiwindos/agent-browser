@@ -12,8 +12,8 @@ Primary browser workflow is universal and Markdown-node-first. Do not start by c
 
 1. Open or attach to the page (`desktop_open` for interactive/live browser sessions; `open`/`wait_ready` only for simple non-interactive pages).
 2. Call `page_markdown`.
-3. Call `read_page_md` when the Markdown artifact is returned, then reason over the Markdown content and listed UI `node_id` values.
-4. Choose the `node_id` that best advances the user task: a result link, table row control, forum page link, search result, account menu, filter, “next”, “show more”, “load more”, submit button, etc.
+3. Call `read_page_md` when the Markdown artifact is returned, then reason over the Markdown content and listed revision-scoped UI `node_id` values.
+4. Choose the revision-scoped `node_id` that best advances the user task: a result link, table row control, forum page link, search result, account menu, filter, “next”, “show more”, “load more”, submit button, etc.
 5. Call `page_markdown.act node_id=<id> node_action=click|fill|type|select|submit revision=<revision>` for page-changing actions. It performs the DOM action and returns refreshed `action_page_markdown`; use that as the next state.
 6. Repeat the inspect -> decide -> act -> refreshed-Markdown loop until the task is solved or bounded attempts are exhausted.
 

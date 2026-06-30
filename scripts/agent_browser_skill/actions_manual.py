@@ -14,7 +14,7 @@ from agent_browser_skill.core.artifacts import artifact_download_files
 from agent_browser_skill.core.output import cap_output, metadata
 from agent_browser_skill.core.paths import ensure_inside, remember_url, remembered_url
 from agent_browser_skill.core.snapshot_artifacts import compact_excerpt, write_json_artifact, write_text_artifact
-from agent_browser_skill.core.page_markdown import build_snapshot_from_dom, dom_extraction_script, selector_for_handle
+from agent_browser_skill.core.page_markdown import build_snapshot_from_dom, dom_extraction_script, live_signature_script, selector_for_handle
 from agent_browser_skill.core.workflow import (
     build_browser_workflow,
     duplicate_read_guard,
@@ -1583,7 +1583,7 @@ def _markdown_workflow_meta(markdown_file: Path | None = None, artifact_id: str 
         artifact_policy={**TEXT_ARTIFACT_POLICY, "primary_artifact": "markdown", "artifact_id": artifact_id},
         context_policy={**TEXT_CONTEXT_POLICY, "read_markdown_before_acting": True, "reread_markdown_after_page_change": True},
         constraints={"do_not_use_screenshot_for_text": True, "do_not_use_large_raw_evaluate": True, "do_not_read_artifact_directory_when_markdown_file_is_available": True},
-        user_message_hint="Markdown-first: read the Markdown artifact, choose an action from UI handles/content, then call page_markdown again after any page-changing action.",
+        user_message_hint="Markdown-first: read the Markdown artifact, choose a revision-scoped node_id from UI handles/content, then call page_markdown.act for page-changing actions.",
     ) | {"markdown_first_policy": markdown_first_policy(artifact_id=artifact_id, markdown_file=str(markdown_file) if markdown_file else None)}
 
 
@@ -1633,7 +1633,12 @@ def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]
         "read_page_md_used": True,
         "recommended_next_action": "page_markdown.act",
         "allowed_next_actions": ["page_markdown.act", "page_markdown", "search_artifact", "read_artifact_slice", "scroll_until_stable", "navigate_pagination", "click_handle", "fill_handle", "select_handle", "extract_forum_posts", "summarize_artifact"],
-        "next_tool_call": {"action": "page_markdown"},
+        "next_tool_call": {
+            "action": "page_markdown.act",
+            "node_id": "<choose_from_markdown>",
+            "node_action": "click|fill|type|select|submit",
+            "revision": "<current_revision>",
+        },
         "markdown_first_policy": markdown_first_policy(artifact_id=artifact_id or None, markdown_file=path),
     })
     mark_pending_gate_completed(root, paths, "read_page_md")
@@ -1652,7 +1657,22 @@ def _load_last_handle(root: Path, paths: dict[str, Path], handle: str) -> dict[s
     raise ToolError(f"handle not found in latest Markdown mapping: {handle}")
 
 
-def _load_last_node(root: Path, paths: dict[str, Path], node_id: str, revision: Any = None) -> dict[str, Any]:
+def _signature_without_timestamp(signature: dict[str, Any]) -> dict[str, Any]:
+    return {k: signature.get(k) for k in ("url", "title", "readyState", "body_text_hash", "dom_node_count")}
+
+
+def _check_live_signature(args: dict[str, Any], metadata_obj: dict[str, Any]) -> None:
+    expected = metadata_obj.get("live_signature")
+    if not isinstance(expected, dict) or not expected:
+        return
+    live = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), live_signature_script(), timeout=timeout_from(args))
+    if not isinstance(live, dict):
+        raise ToolError("BLOCKED_STALE_PAGE: could not verify current page live signature; call page_markdown and retry")
+    if _signature_without_timestamp(live) != _signature_without_timestamp(expected):
+        raise ToolError("BLOCKED_STALE_PAGE: current page changed since the last page_markdown mapping; call page_markdown and retry with the current node_id")
+
+
+def _load_last_node(root: Path, paths: dict[str, Path], node_id: str, revision: Any = None, args: dict[str, Any] | None = None) -> dict[str, Any]:
     workflow = load_workflow_state(root, paths)
     path = str(workflow.get("last_elements_file") or "").strip()
     if not path:
@@ -1662,6 +1682,8 @@ def _load_last_node(root: Path, paths: dict[str, Path], node_id: str, revision: 
     current_revision = metadata_obj.get("revision")
     if revision is not None and str(revision).strip() and current_revision is not None and str(revision) != str(current_revision):
         raise ToolError(f"BLOCKED_STALE_PAGE: stale page_markdown revision requested={revision} current={current_revision}; call page_markdown and retry with the current node_id")
+    if args is not None:
+        _check_live_signature(args, metadata_obj)
     matches = [el for el in (data.get("elements") or []) if isinstance(el, dict) and (el.get("node_id") == node_id or el.get("handle") == node_id)]
     if len(matches) > 1:
         raise ToolError(f"BLOCKED_AMBIGUOUS_REBIND: node_id {node_id} matched {len(matches)} elements in the latest Markdown mapping; call page_markdown and choose a unique node_id")
@@ -1724,7 +1746,7 @@ def action_page_markdown_act(root: Path, paths: dict[str, Path], args: dict[str,
         raise ToolError("node_id is required for page_markdown.act")
     if op not in {"click", "fill", "type", "select", "submit"}:
         raise ToolError("page_markdown.act requires node_action/operation to be one of: click, fill, type, select, submit")
-    el = _load_last_node(root, paths, node_id, args.get("revision"))
+    el = _load_last_node(root, paths, node_id, args.get("revision"), args)
     selector = el.get("selector") or selector_for_handle(str(el.get("handle") or node_id))
     action_output = ""
     action_meta: dict[str, Any] = {}

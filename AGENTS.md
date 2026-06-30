@@ -98,7 +98,7 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 - `helpers.py` — shared small helper functions.
 - `locks.py` — lock handling for browser/manual-session concurrency.
 - `output.py` — output shaping, redaction, and compact response helpers.
-- `page_markdown.py` — canonical page Markdown runtime representation (`PageMarkdownArtifact`), DOM-to-Markdown conversion, and node/action map generation.
+- `page_markdown.py` — canonical page Markdown runtime representation (`PageMarkdownArtifact`), DOM-to-Markdown conversion, live signature capture, and revision-scoped node/action map generation.
 - `paths.py` — repository/runtime path calculation.
 - `patterns.py` — shared regex/string matching patterns.
 - `profiles.py` — browser profile aliasing and profile resolution.
