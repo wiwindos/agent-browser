@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.70
+
+- Added the `PageMarkdownArtifact` runtime representation with revision, URL/title, Markdown, node/action maps, warnings, and stability metadata.
+- Added `page_markdown.get` as an explicit action alias that returns Markdown-first page state and writes the full page-markdown artifact.
+
 ## 0.3.69
 
 - Added root `AGENTS.md` with AI-agent development rules, required version/changelog workflow, repository structure, and file responsibility map.
