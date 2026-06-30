@@ -136,3 +136,45 @@ def test_page_markdown_act_resolves_node_acts_and_refreshes_markdown(monkeypatch
     assert calls[-1]["selector"] == '[data-agent-browser-handle="button:1"]'
     assert meta["page_markdown_act_used"] is True
     assert meta["revision"] == 4
+
+import pytest
+from agent_browser_skill.errors import ToolError
+
+
+def test_page_markdown_act_blocks_stale_revision_with_code(tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "nodes"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({"metadata": {"revision": 5}, "elements": [{"node_id": "button:1", "handle": "button:1", "selector": "button"}]}), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"; md.write_text("# Page", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping)
+
+    with pytest.raises(ToolError, match="BLOCKED_STALE_PAGE"):
+        action_page_markdown_act(tmp_path, paths, {"action": "page_markdown.act", "node_id": "button:1", "node_action": "click", "revision": 4})
+
+
+def test_page_markdown_act_blocks_not_actionable_node(tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "nodes"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({"metadata": {"revision": 1}, "elements": [{"node_id": "button:1", "handle": "button:1", "selector": "button", "disabled": True}]}), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"; md.write_text("# Page", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping)
+
+    with pytest.raises(ToolError, match="BLOCKED_NOT_ACTIONABLE"):
+        action_page_markdown_act(tmp_path, paths, {"action": "page_markdown.act", "node_id": "button:1", "node_action": "click", "revision": 1})
+
+
+def test_page_markdown_act_blocks_ambiguous_rebind(tmp_path):
+    paths = paths_for(tmp_path, {"action": "test", "profile": "nodes"})
+    paths["logs"].mkdir(parents=True, exist_ok=True)
+    mapping = paths["logs"] / "page-md-elements.json"
+    mapping.write_text(json.dumps({"metadata": {"revision": 1}, "elements": [
+        {"node_id": "button:1", "handle": "button:1", "selector": "button:nth-of-type(1)"},
+        {"node_id": "button:1", "handle": "button:1", "selector": "button:nth-of-type(2)"},
+    ]}), encoding="utf-8")
+    md = paths["logs"] / "page-md.txt"; md.write_text("# Page", encoding="utf-8")
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=md, elements_file=mapping)
+
+    with pytest.raises(ToolError, match="BLOCKED_AMBIGUOUS_REBIND"):
+        action_page_markdown_act(tmp_path, paths, {"action": "page_markdown.act", "node_id": "button:1", "node_action": "click", "revision": 1})

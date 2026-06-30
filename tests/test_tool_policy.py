@@ -211,3 +211,10 @@ def test_desktop_open_without_url_preserves_4pda_profile_in_error(tmp_path: Path
     assert "page_markdown" in out["message"]
     assert out["state"]["profile"] == "4pda.to"
     assert "profile=default" not in out["message"]
+
+
+def test_safe_profile_blocks_raw_execution_actions(tmp_path):
+    for action in ("evaluate", "run", "command.run", "plugin.run"):
+        out = _run(tmp_path, {"action": action, "profile": "safe", "script": "1+1", "task": "echo hi"})
+        assert out["success"] is False
+        assert "BLOCKED_SAFE_PROFILE" in out["message"]

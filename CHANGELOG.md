@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.73
+
+- Hardened the Markdown-first action workflow with explicit stale-revision, non-actionable-node, ambiguous-rebind, and safe-profile blocking errors.
+- Ensured `page_markdown.act` remains the required page-changing path by settling and rebuilding Markdown after node actions.
+
 ## 0.3.72
 
 - Promoted the universal `page_markdown` -> `read_page_md` -> `page_markdown.act` loop as the primary agentic browser workflow for catalogs, forums, search results, tables, personal accounts, SPAs, and show-more/next controls.
