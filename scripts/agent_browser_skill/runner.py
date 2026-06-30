@@ -89,7 +89,7 @@ def _suggested_next_action(action: str, state: dict) -> str | None:
             return "page_markdown"
         return "scroll_until_stable" if "scroll_until_stable" in allowed else ("wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None))
     if action == "status" and state.get("phase") in {"READY", "LOADED"}:
-        for candidate in ("get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
+        for candidate in ("page_markdown", "read_page_md", "search_artifact", "get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
             if candidate in allowed:
                 return candidate
     return allowed[0] if allowed else None
@@ -366,7 +366,7 @@ def run_request(request: dict) -> dict:
         if state.get("pending_next_action"):
             state["next_allowed_actions"] = list(dict.fromkeys([state["pending_next_action"], *state["next_allowed_actions"]]))
         if requested_action == "status" and state.get("phase") in {"READY", "LOADED"}:
-            preferred = ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
+            preferred = ["page_markdown", "read_page_md", "search_artifact", "get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
             state["next_allowed_actions"] = list(dict.fromkeys([*preferred, *state["next_allowed_actions"]]))
         state["last_error"] = None
         save_state(root, state)

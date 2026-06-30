@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.72
+
+- Promoted the universal `page_markdown` -> `read_page_md` -> `page_markdown.act` loop as the primary agentic browser workflow for catalogs, forums, search results, tables, personal accounts, SPAs, and show-more/next controls.
+- Reframed specialized extractors and `navigate_pagination` as optional fast paths after Markdown inspection instead of the default route.
+- Updated runner suggestions and workflow metadata so status and blocked-browser recovery prefer Markdown-node actions before legacy text/forum extractors.
+
 ## 0.3.71
 
 - Added `page_markdown.act` to perform click/fill/type/select/submit against Markdown `node_id` targets and return a refreshed `action_page_markdown` snapshot in the same action cycle.
