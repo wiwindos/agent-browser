@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.74
+
+- Removed the obsolete vendored `snitchmd-master/` upstream snapshot from the repository.
+- Refactored runtime dependency installation helpers to share apt update/install and Chrome verification logic without changing browser behavior.
+- Added a bilingual English/Russian README with repository overview, workflows, checks, and release notes guidance.
+- Updated repository agent instructions to reflect the slimmer repository structure.
+
 ## 0.3.73
 
 - Hardened the Markdown-first action workflow with explicit stale-revision, non-actionable-node, ambiguous-rebind, and safe-profile blocking errors.
