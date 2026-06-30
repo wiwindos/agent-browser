@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.69
+
+- Added root `AGENTS.md` with AI-agent development rules, required version/changelog workflow, repository structure, and file responsibility map.
+- Synchronized the Python and manifest skill versions for the documentation-policy update.
+
 ## 0.3.68
 
 - Added typed minimal vertical forum actions: `wait_ready`, `scroll_until_stable`, `extract_forum_posts`, `read_artifact_slice`, and `summarize_artifact`.
