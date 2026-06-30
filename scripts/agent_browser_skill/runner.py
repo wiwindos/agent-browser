@@ -222,6 +222,10 @@ def run_request(request: dict) -> dict:
                 },
             )
             return payload
+        if requested_action in {"command.run", "plugin.run", "plugin run"} or (requested_action == "run" and str(args.get("profile") or "").strip().lower() == "safe"):
+            raise ToolError(f"BLOCKED_SAFE_PROFILE: {requested_action} is not available in the safe browser profile; use page_markdown/page_markdown.act or typed browser actions")
+        if action == "evaluate" and str(args.get("profile") or "").strip().lower() == "safe":
+            raise ToolError("BLOCKED_SAFE_PROFILE: evaluate is not available in the safe browser profile; use page_markdown/page_markdown.act")
         if action not in ACTIONS:
             if action == "send_file":
                 raise ToolError(

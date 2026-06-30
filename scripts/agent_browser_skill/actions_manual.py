@@ -1661,11 +1661,16 @@ def _load_last_node(root: Path, paths: dict[str, Path], node_id: str, revision: 
     metadata_obj = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     current_revision = metadata_obj.get("revision")
     if revision is not None and str(revision).strip() and current_revision is not None and str(revision) != str(current_revision):
-        raise ToolError(f"stale page_markdown revision: requested {revision}, current {current_revision}; call page_markdown and retry with the current node_id")
-    for el in data.get("elements") or []:
-        if isinstance(el, dict) and (el.get("node_id") == node_id or el.get("handle") == node_id):
-            return el
-    raise ToolError(f"node_id not found in latest Markdown mapping: {node_id}")
+        raise ToolError(f"BLOCKED_STALE_PAGE: stale page_markdown revision requested={revision} current={current_revision}; call page_markdown and retry with the current node_id")
+    matches = [el for el in (data.get("elements") or []) if isinstance(el, dict) and (el.get("node_id") == node_id or el.get("handle") == node_id)]
+    if len(matches) > 1:
+        raise ToolError(f"BLOCKED_AMBIGUOUS_REBIND: node_id {node_id} matched {len(matches)} elements in the latest Markdown mapping; call page_markdown and choose a unique node_id")
+    if not matches:
+        raise ToolError(f"node_id not found in latest Markdown mapping: {node_id}")
+    el = matches[0]
+    if el.get("actionable") is False or el.get("disabled") or el.get("visible") is False or not (el.get("selector") or el.get("handle")):
+        raise ToolError(f"BLOCKED_NOT_ACTIONABLE: node_id {node_id} is not actionable in the latest Markdown mapping")
+    return el
 
 
 def action_click_handle(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
