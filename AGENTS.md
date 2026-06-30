@@ -58,6 +58,7 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 - `SKILL.md` — full user-facing/agent-facing operating instructions for the browser skill: workflows, fast paths, hard rules, references, examples, and release-version reminder.
 - `AUTOLOAD.md` — compact autoload prompt injected by compatible agent stacks for lightweight browser-specific guidance.
 - `CHANGELOG.md` — chronological release notes; newest version first.
+- `README.md` — bilingual English/Russian repository overview, development workflow, and recommended checks.
 - `AGENTS.md` — repository-level agent instructions, workflow rules, version/changelog policy, and structure map.
 - `IMPLEMENTATION_PLAN.md` — planning notes for broader implementation work.
 
@@ -149,10 +150,6 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 - `reference/security.md` — security and protected-path guidance.
 - `examples/*.md` — runnable/user-facing workflow examples.
 - `references/upstream-SKILL.md` — upstream skill reference material retained for comparison/context.
-
-### Vendored/upstream runtime material
-
-- `snitchmd-master/` — vendored/upstream runtime material and dependencies used for browser tooling. Avoid editing unless the task specifically targets that subtree.
 
 ## Git hygiene
 

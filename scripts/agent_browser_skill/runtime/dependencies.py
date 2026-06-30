@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_browser_skill.core.patterns import APT_LOCK_RE
-from agent_browser_skill.errors import ToolError
 from agent_browser_skill.core.helpers import safe_slug
+from agent_browser_skill.errors import ToolError
 from agent_browser_skill.runtime.constants import CHROME_DEPS_BASE, CHROME_DEPS_T64, DESKTOP_DEPS
 from agent_browser_skill.runtime.process import run_process
 
@@ -140,44 +140,58 @@ def require_agent_browser(root: Path, args: dict[str, Any], timeout: int) -> str
     )
 
 
+def ensure_apt_available(missing_message: str) -> None:
+    if not shutil.which("apt-get"):
+        raise ToolError(missing_message)
+
+
+def apt_update(root: Path, timeout: int) -> None:
+    code, out = run_process(apt_get_command("update"), timeout=timeout, cwd=root)
+    if code == 0:
+        return
+    if APT_LOCK_RE.search(out):
+        raise ToolError(f"apt is already running in this sandbox; retry later:\n{out}")
+    raise ToolError(f"failed to update apt package index: {out}")
+
+
+def apt_install(root: Path, timeout: int, packages: list[str]) -> tuple[int, str]:
+    return run_process(
+        apt_get_command("install", "-y", "--no-install-recommends", *packages),
+        timeout=timeout,
+        cwd=root,
+    )
+
+
+def verify_chrome_after_install(root: Path, args: dict[str, Any] | None, timeout: int, notes: list[str], label: str) -> str:
+    if chrome_runtime_ready(root):
+        return "; ".join(notes + [label])
+    if args is not None:
+        notes.append(install_agent_browser_chrome(root, args, timeout))
+        if chrome_runtime_ready(root):
+            return "; ".join(notes + [label])
+    raise ToolError(f"{label}, but Chrome runtime verification still fails; no usable browser runtime was found")
+
+
 def install_browser_dependencies(root: Path, timeout: int, args: dict[str, Any] | None = None) -> str:
     if chrome_runtime_ready(root):
         return "Chrome dependencies already available"
+
     notes: list[str] = []
     if args is not None and not chrome_binary_exists(root):
         notes.append(install_agent_browser_chrome(root, args, timeout))
         if chrome_runtime_ready(root):
             return "; ".join(notes + ["Chrome runtime available"])
-    if not shutil.which("apt-get"):
-        raise ToolError("Chrome dependencies are missing and apt-get is not available in this sandbox")
 
-    update_code, update_out = run_process(apt_get_command("update"), timeout=timeout, cwd=root)
-    if update_code != 0:
-        if APT_LOCK_RE.search(update_out):
-            raise ToolError(f"apt is already running in this sandbox; retry later:\n{update_out}")
-        raise ToolError(f"failed to update apt package index: {update_out}")
+    ensure_apt_available("Chrome dependencies are missing and apt-get is not available in this sandbox")
+    apt_update(root, timeout)
 
-    install_cmd = apt_get_command("install", "-y", "--no-install-recommends", *CHROME_DEPS_BASE)
-    code, out = run_process(install_cmd, timeout=timeout, cwd=root)
+    code, out = apt_install(root, timeout, CHROME_DEPS_BASE)
     if code == 0:
-        if chrome_runtime_ready(root):
-            return "; ".join(notes + ["installed Chrome dependencies"])
-        if args is not None:
-            notes.append(install_agent_browser_chrome(root, args, timeout))
-            if chrome_runtime_ready(root):
-                return "; ".join(notes + ["installed Chrome dependencies"])
-        raise ToolError("Chrome dependencies installed, but Chrome runtime verification still fails; no usable browser runtime was found")
+        return verify_chrome_after_install(root, args, timeout, notes, "installed Chrome dependencies")
 
-    install_cmd = apt_get_command("install", "-y", "--no-install-recommends", *CHROME_DEPS_T64)
-    code2, out2 = run_process(install_cmd, timeout=timeout, cwd=root)
+    code2, out2 = apt_install(root, timeout, CHROME_DEPS_T64)
     if code2 == 0:
-        if chrome_runtime_ready(root):
-            return "; ".join(notes + ["installed Chrome dependencies (t64 package set)"])
-        if args is not None:
-            notes.append(install_agent_browser_chrome(root, args, timeout))
-            if chrome_runtime_ready(root):
-                return "; ".join(notes + ["installed Chrome dependencies (t64 package set)"])
-        raise ToolError("Chrome dependencies installed with t64 package set, but Chrome runtime verification still fails; no usable browser runtime was found")
+        return verify_chrome_after_install(root, args, timeout, notes, "installed Chrome dependencies (t64 package set)")
 
     if APT_LOCK_RE.search(out) or APT_LOCK_RE.search(out2):
         raise ToolError(f"apt is already running in this sandbox; retry later:\n{out}\n\nfallback:\n{out2}")
@@ -187,22 +201,16 @@ def install_browser_dependencies(root: Path, timeout: int, args: dict[str, Any] 
 def install_desktop_dependencies(root: Path, timeout: int) -> str:
     if desktop_runtime_ready(root):
         return "desktop/noVNC dependencies already available"
-    if not shutil.which("apt-get"):
-        raise ToolError("Desktop dependencies are missing and apt-get is not available in this sandbox")
-    update_code, update_out = run_process(apt_get_command("update"), timeout=timeout, cwd=root)
-    if update_code != 0:
-        if APT_LOCK_RE.search(update_out):
-            raise ToolError(f"apt is already running in this sandbox; retry later:\n{update_out}")
-        raise ToolError(f"failed to update apt package index: {update_out}")
-    code, out = run_process(
-        apt_get_command("install", "-y", "--no-install-recommends", *DESKTOP_DEPS),
-        timeout=timeout,
-        cwd=root,
-    )
+
+    ensure_apt_available("Desktop dependencies are missing and apt-get is not available in this sandbox")
+    apt_update(root, timeout)
+
+    code, out = apt_install(root, timeout, DESKTOP_DEPS)
     if code != 0:
         if APT_LOCK_RE.search(out):
             raise ToolError(f"apt is already running in this sandbox; retry later:\n{out}")
         raise ToolError(f"failed to install desktop/noVNC dependencies: {out}")
+
     missing = missing_desktop_runtime_components()
     if missing:
         raise ToolError(
