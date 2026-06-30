@@ -128,7 +128,7 @@ def test_desktop_open_guides_data_extraction_before_screenshot(monkeypatch: pyte
     assert "text_file:" in output
     assert "PRIMARY_NEXT_TOOL_CALL" in output
     assert "page_markdown" in output
-    assert "Markdown content plus stable UI handles" in output
+    assert "Markdown content plus stable node_id values" in output
     assert "desktop_screenshot" in output
     assert "read_file" in output
     assert "action=run" in output

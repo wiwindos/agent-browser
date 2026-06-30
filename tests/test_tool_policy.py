@@ -132,8 +132,8 @@ def test_browser_sequence_returns_structured_guidance_not_shell(tmp_path: Path, 
     assert results[1]["suggested_next_action"] == "page_markdown"
     assert results[2]["state"]["phase"] == "READY"
     assert results[2]["suggested_next_action"] == "wait_ready"
-    assert results[3]["suggested_next_action"] == "get_page_text"
-    assert results[3]["next_allowed_actions"][:4] == ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
+    assert results[3]["suggested_next_action"] == "page_markdown"
+    assert results[3]["next_allowed_actions"][:4] == ["page_markdown", "read_page_md", "search_artifact", "get_page_text"]
 
 
 def test_observed_4pda_browser_workflow_gate_sequence(tmp_path: Path, monkeypatch) -> None:

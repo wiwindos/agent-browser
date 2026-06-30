@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
-  "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Use for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination navigation, and Saby/SBIS tender CSV export through actions like open, snapshot, manual_desktop, desktop_open, continue_after_manual, read_artifact, smart_read, find_text, navigate_pagination, downloads, and saby_tenders_csv.",
-  "version": "0.3.71",
+  "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Uses a universal Markdown-node agentic workflow for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination/show-more navigation, and Saby/SBIS tender CSV export through actions like open, desktop_open, page_markdown, read_page_md, page_markdown.act, downloads, and saby_tenders_csv. Specialized extractors remain optional fast paths, not the primary workflow.",
+  "version": "0.3.72",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",
@@ -16,7 +16,7 @@
   "tools": [
     {
       "name": "browser",
-      "description": "Skill-owned browser automation tool. Runs only through the per-user sandbox and wraps agent-browser CLI with safe profiles, artifacts, compact snapshots, protected artifact reading, pagination helpers, screenshots, login sessions, challenge handoff, manual_desktop, desktop_open, continue_after_manual, downloads, cleanup, and saby_tenders_csv export.",
+      "description": "Skill-owned browser automation tool. Runs only through the per-user sandbox and wraps agent-browser CLI with safe profiles, artifacts, compact snapshots, Markdown node_id inspection, page_markdown.act actions, protected artifact reading, screenshots, login sessions, challenge handoff, manual_desktop, desktop_open, downloads, cleanup, and optional extractor fast paths.",
       "script": "scripts/browser_tool.py",
       "runtime": "python",
       "autoload_base": true,
@@ -144,7 +144,7 @@
           },
           "target": {
             "type": "string",
-            "description": "For navigate_pagination: target pagination direction, one of first, prev, next, last."
+            "description": "For navigate_pagination optional fast-path: target pagination direction, one of first, prev, next, last. Prefer page_markdown plus page_markdown.act on visible pagination/show-more node_id controls for the primary workflow."
           },
           "filter_text": {
             "type": "string",
@@ -351,15 +351,15 @@
               "4pda",
               "generic_forum"
             ],
-            "description": "For extract_forum_posts: forum adapter, defaults to auto; 4pda uses stable selectors and pagination hints."
+            "description": "For optional extract_forum_posts fast-path: forum adapter, defaults to auto. Use only after page_markdown inspection confirms a forum page; primary workflow remains Markdown node reasoning plus page_markdown.act."
           },
           "date_filter": {
             "type": "string",
-            "description": "For extract_forum_posts: optional normalized date filter such as yesterday or today."
+            "description": "For optional extract_forum_posts fast-path: optional normalized date filter such as yesterday or today."
           },
           "artifact_id": {
             "type": "string",
-            "description": "Opaque artifact ID returned by list_artifacts/extract_forum_posts for artifact APIs."
+            "description": "Opaque artifact ID returned by list_artifacts/page_markdown/extract_forum_posts for artifact APIs."
           },
           "offset": {
             "type": "integer",

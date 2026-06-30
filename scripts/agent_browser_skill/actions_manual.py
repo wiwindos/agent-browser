@@ -956,9 +956,9 @@ def action_close_manual_access(root: Path, paths: dict[str, Path], args: dict[st
 def _page_markdown_next_lines(*, legacy_text_file: Path | None = None) -> list[str]:
     lines = [
         "PRIMARY_NEXT_TOOL_CALL: " + json.dumps({"action": "page_markdown"}, ensure_ascii=False),
-        "next_step: call page_markdown, read the Markdown artifact with read_page_md, choose a handle/action from content and UI, then call page_markdown again after page-changing actions",
+        "next_step: call page_markdown, read the Markdown artifact with read_page_md, choose the needed UI node_id from content, then use page_markdown.act; the action returns refreshed Markdown",
         "next_tool_call: " + json.dumps({"action": "page_markdown"}, ensure_ascii=False),
-        "markdown_first_workflow: use Markdown content plus stable UI handles; specialized date/forum extractors are optional fast paths only when the Markdown indicates they fit",
+        "markdown_first_workflow: use Markdown content plus stable node_id values; specialized date/forum/search/table extractors and pagination helpers are optional fast paths only after Markdown inspection",
         "do_not_use_for_text_extraction: desktop_screenshot, read_file, run_command, raw fetch_page, curl, large raw evaluate, action=run",
     ]
     if legacy_text_file is not None:
@@ -1511,7 +1511,7 @@ def action_evaluate(root: Path, paths: dict[str, Path], args: dict[str, Any]) ->
         suggested = {"action": "page_markdown" if text_like else "extract_blocks"}
         meta = metadata(paths)
         meta.update({"error_code": "RAW_EVAL_DISABLED", "suggested_next_action": suggested})
-        return "\n".join(["RAW_EVAL_DISABLED", "raw evaluate is disabled for normal browsing; use typed actions", "suggested_next_action: " + json.dumps(suggested, ensure_ascii=False)]), meta
+        return "\n".join(["RAW_EVAL_DISABLED", "raw evaluate is disabled for normal browsing; use page_markdown and page_markdown.act", "suggested_next_action: " + json.dumps(suggested, ensure_ascii=False)]), meta
     before_downloads = set(paths["downloads"].glob("*")) if paths["downloads"].exists() else set()
     value = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script)
     time.sleep(1.0)
@@ -1578,7 +1578,7 @@ def _markdown_workflow_meta(markdown_file: Path | None = None, artifact_id: str 
         recommended_next_action="read_page_md" if markdown_file else "page_markdown",
         recommended_next_args={"max_chars": 3000} if markdown_file else {},
         next_tool_call={"action": "read_page_md", "max_chars": 3000} if markdown_file else {"action": "page_markdown"},
-        allowed_next_actions=["read_page_md", "read_artifact", "read_artifact_by_id", "page_markdown.act", "click_handle", "fill_handle", "select_handle", "click_text", "click_selector", "scroll_until_stable", "navigate_pagination", "find_text", "search_artifact"],
+        allowed_next_actions=["read_page_md", "page_markdown.act", "read_artifact", "read_artifact_by_id", "search_artifact", "scroll_until_stable", "navigate_pagination", "find_text", "click_handle", "fill_handle", "select_handle", "click_text", "click_selector"],
         forbidden_next_actions=TEXT_EXTRACTION_FORBIDDEN_ACTIONS,
         artifact_policy={**TEXT_ARTIFACT_POLICY, "primary_artifact": "markdown", "artifact_id": artifact_id},
         context_policy={**TEXT_CONTEXT_POLICY, "read_markdown_before_acting": True, "reread_markdown_after_page_change": True},
@@ -1632,7 +1632,7 @@ def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]
         "artifact_id": artifact_id or meta.get("artifact_id"),
         "read_page_md_used": True,
         "recommended_next_action": "page_markdown.act",
-        "allowed_next_actions": ["page_markdown.act", "click_handle", "fill_handle", "select_handle", "page_markdown", "search_artifact", "read_artifact_slice", "navigate_pagination", "scroll_until_stable", "extract_forum_posts", "summarize_artifact"],
+        "allowed_next_actions": ["page_markdown.act", "page_markdown", "search_artifact", "read_artifact_slice", "scroll_until_stable", "navigate_pagination", "click_handle", "fill_handle", "select_handle", "extract_forum_posts", "summarize_artifact"],
         "next_tool_call": {"action": "page_markdown"},
         "markdown_first_policy": markdown_first_policy(artifact_id=artifact_id or None, markdown_file=path),
     })

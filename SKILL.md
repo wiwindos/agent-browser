@@ -8,15 +8,23 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 
 ## Choose Workflow
 
-- Normal webpage: `open` -> `wait_ready` -> typed extraction/action (`get_page_text`, `find_text`, `extract_links`, `extract_blocks`, `click_text`, `click_selector`) -> `screenshot` only when visual proof is needed.
-- Generic multi-step browser task: call `action=skills skill=core full=true` first, then continue through the single `browser` tool.
-- Empty or unusable snapshot: if `snapshot_ok=true` but `refs_count=0`, `title=(unknown)`, or useful page text is missing, read the exact returned `snapshot_file` with `read_artifact`; if still unusable, use `desktop_open` -> `desktop_snapshot` on the same profile/url before trying `screenshot`.
-- Authenticated site: use `login` with a stable `profile`; see `reference/auth-and-profiles.md`.
-- Manual desktop or classic noVNC: use `manual_desktop` or `desktop_open`; see `reference/manual-desktop-and-novnc.md`.
-- Markdown-node interaction: after `desktop_open`, call `page_markdown`, read/choose a `node_id`, then use `page_markdown.act node_id=<id> node_action=click|fill|type|select|submit revision=<revision>`; it performs the DOM action and immediately returns refreshed page Markdown. Prefer this over `@eN`, raw selectors, or legacy handle actions.
+Primary browser workflow is universal and Markdown-node-first. Do not start by choosing a site-specific/date/forum/search extractor.
+
+1. Open or attach to the page (`desktop_open` for interactive/live browser sessions; `open`/`wait_ready` only for simple non-interactive pages).
+2. Call `page_markdown`.
+3. Call `read_page_md` when the Markdown artifact is returned, then reason over the Markdown content and listed UI `node_id` values.
+4. Choose the `node_id` that best advances the user task: a result link, table row control, forum page link, search result, account menu, filter, “next”, “show more”, “load more”, submit button, etc.
+5. Call `page_markdown.act node_id=<id> node_action=click|fill|type|select|submit revision=<revision>` for page-changing actions. It performs the DOM action and returns refreshed `action_page_markdown`; use that as the next state.
+6. Repeat the inspect -> decide -> act -> refreshed-Markdown loop until the task is solved or bounded attempts are exhausted.
+
+This loop is the main workflow for catalogs, forums, search results, tables, personal accounts, SPAs, and pages with “more/next/show” controls. Specialized extractors (`extract_table`, `extract_search_results`, `extract_updates_by_date`, `extract_forum_posts`, etc.) are optional fast paths only after Markdown inspection shows they fit the page; they must not replace the general node-reasoning loop.
+
+- Empty or unusable snapshot: if `snapshot_ok=true` but `refs_count=0`, `title=(unknown)`, or useful page text is missing, read the exact returned `snapshot_file` with `read_artifact`; if still unusable, use `desktop_open` -> `page_markdown` before trying `screenshot`.
+- Authenticated site: use `login` with a stable `profile`; see `reference/auth-and-profiles.md`, then continue with `page_markdown`.
+- Manual desktop or classic noVNC: use `manual_desktop` or `desktop_open`; see `reference/manual-desktop-and-novnc.md`, then continue with `page_markdown`.
 - Captcha or Cloudflare handoff: use `challenge_detected`, wait for the user, then `continue_after_manual`; see `reference/manual-desktop-and-novnc.md`.
-- Protected browser artifacts: use `read_artifact` instead of `read_file` or shell commands.
-- Thread/forum pagination: use `navigate_pagination target=last|next|prev|first` instead of raw `evaluate` when possible. For requests like "what was new yesterday", continue navigating/reading until you extract posts dated yesterday; do not stop after only opening the page or sending a screenshot.
+- Protected browser artifacts: use `read_artifact`/`read_page_md` instead of `read_file` or shell commands.
+- Pagination, date, forum, table, and search-result tasks: first inspect Markdown and use visible controls through `page_markdown.act`. `navigate_pagination` and typed extractors are compatibility/fast-path helpers only when the Markdown loop indicates they are appropriate. Continue navigating/reading until you extract the requested data; do not stop after only opening the page or sending a screenshot.
 - Saby/SBIS export: use `profile=saby`, `desktop_open`, and `saby_tenders_csv`; see `reference/saby-export.md`.
 - Saby/SBIS subscription/sidebar filter: pass `subscription_text=...` to `saby_tenders_csv` so the collector selects the left-menu item in-page instead of slow manual clicking.
 - Downloads or artifact retrieval: use `downloads`; see `reference/artifacts-and-downloads.md`.
@@ -27,11 +35,11 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Explicit `agent-browser` request with one concrete site task: load `skill_agent-browser_browser` and call the relevant `action` immediately.
 - Direct Saby export: `desktop_open profile=saby url=...` -> `saby_tenders_csv profile=saby mode=yesterday`.
 - Manual confirmation follow-up after a browser handoff: call `continue_after_manual` on the same `profile` and `url`. Do not require an exact confirmation word.
-- If `snapshot`, `desktop_snapshot`, `desktop_open`, or `evaluate` returns `*_file` paths, use `read_artifact` to inspect the protected full content instead of `read_file`, `run_command`, or large raw `evaluate` dumps. For date-based/forum tasks, follow the exact `next_tool_call`/`text_file` path with `read_artifact`, then use page controls, `navigate_pagination`, or in-page search to locate the requested date before answering.
+- If `snapshot`, `desktop_snapshot`, `desktop_open`, or `evaluate` returns `*_file` paths, use `read_artifact`/`read_page_md` to inspect protected content instead of `read_file`, `run_command`, or large raw `evaluate` dumps. Prefer the `page_markdown`/`read_page_md` next call when present.
 - An exact returned `text_file` has priority over the artifact run directory. Do not pass the artifact directory to `read_artifact` while a `text_file` path is present or pending. Directory reads are only a fallback when no exact `*_file` path is available.
-- If you need to read/search the current page but do not have the exact artifact path in context, use `smart_read` or `find_text`; they reuse the active `text_file` from the current browser workflow.
+- If you need to read/search the current page but do not have the exact Markdown artifact path in context, call `page_markdown` again or use `search_artifact`; `smart_read`/`find_text` remain legacy compatibility helpers for active text artifacts.
 - If tool metadata contains `required_next_tool_call`, treat it as mandatory unless the user explicitly changes the task or the page shows a challenge. Do not substitute screenshot, raw evaluate, shell, repeated artifact-directory reads, or `max_chars` changes for that call.
-- For date/forum extraction, use `read_artifact query=<date>` or `read_artifact regex=<pattern> context_lines=<n>` after the first exact text read. If no match is found, use `navigate_pagination`, read the new exact `text_file`, and search again with bounded attempts.
+- For date/forum/table/search extraction, inspect Markdown first, then use `page_markdown.act` on visible navigation/filter/search/show-more controls. Use artifact `query`/`regex`, `navigate_pagination`, or specialized extractors only as optional fast paths after Markdown shows they fit.
 - When a manual desktop session is already active for the same profile, generic actions like `open`, `snapshot`, `click`, `fill`, and `wait` should stay on the live desktop session instead of starting a second Chrome daemon.
 
 ## Hard Rules
@@ -46,8 +54,8 @@ If the user explicitly names `agent-browser` and asks for a concrete browser act
 - Do not use `read_file` or shell tools to open files under `browser-artifacts/`; use `read_artifact`.
 - Prefer exact file paths with `read_artifact`, especially returned `snapshot_file`, `state_file`, `text_file`, or another `*_file`. If only an artifact run directory is available, pass it to `read_artifact`; the tool will auto-select the best readable text/json artifact.
 - Do not use `screenshot` as the first recovery step for an empty snapshot, and do not substitute a screenshot for requested textual extraction unless the user explicitly asked for an image or visual proof.
-- Do not use raw `fetch_page`, `action=run`, or large raw `evaluate` dumps for page text or HTML if typed actions (`get_page_text`, `find_text`, `extract_links`, `extract_blocks`), `snapshot`, `desktop_snapshot`, `read_artifact`, or `navigate_pagination` can answer the question.
-- Raw `evaluate` is forbidden for ordinary browsing tasks and the normal/happy path. Use typed actions instead. `evaluate` is only allowed when explicitly passed `allow_unsafe_eval=true`; otherwise it returns `RAW_EVAL_DISABLED`/`VALIDATION_ERROR` with a `suggested_next_action`.
+- Do not use raw `fetch_page`, `action=run`, or large raw `evaluate` dumps for page text or HTML. Use `page_markdown`/`read_page_md` and act with `page_markdown.act`; typed extractors and `navigate_pagination` are optional fast paths only after Markdown inspection.
+- Raw `evaluate` is forbidden for ordinary browsing tasks and the normal/happy path. Use the Markdown-node workflow instead. `evaluate` is only allowed when explicitly passed `allow_unsafe_eval=true`; otherwise it returns `RAW_EVAL_DISABLED`/`VALIDATION_ERROR` with a `suggested_next_action`.
 
 ## References
 
