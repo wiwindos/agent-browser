@@ -96,14 +96,16 @@ def top_workspace_dirs(root: Path, limit: int = 8) -> list[str]:
     return [f"{path.relative_to(root)} ({size // 1024 // 1024}MB)" for size, path in rows[:limit]]
 
 
-def cleanup_downloads_screenshots_logs(root: Path) -> list[str]:
+def cleanup_downloads_screenshots_logs(root: Path, *, include_runtime_env: bool = False) -> list[str]:
     notes: list[str] = []
     candidates: list[Path] = []
     artifacts_root = root / "browser-artifacts"
     if artifacts_root.exists():
         for name in ("downloads", "screenshots", "logs"):
             candidates.extend(path for path in artifacts_root.glob(f"*/*/{name}") if path.exists())
-    candidates.extend([root / ".agent-browser" / "logs", root / "node_env"])
+    candidates.append(root / ".agent-browser" / "logs")
+    if include_runtime_env:
+        candidates.append(root / "node_env")
     for target in candidates:
         try:
             if not target.exists():
@@ -208,13 +210,13 @@ def cleanup_profile_caches(root: Path) -> list[str]:
     return notes
 
 
-def auto_cleanup_if_needed(root: Path) -> list[str]:
+def auto_cleanup_if_needed(root: Path, *, include_runtime_env: bool = False) -> list[str]:
     notes = cleanup_empty_artifacts(root)
     if path_size(root) <= WORKSPACE_SOFT_LIMIT_BYTES:
         return notes
     notes.extend(cleanup_browser_artifacts(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
-        notes.extend(cleanup_downloads_screenshots_logs(root))
+        notes.extend(cleanup_downloads_screenshots_logs(root, include_runtime_env=include_runtime_env))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_runtime_caches(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
@@ -224,11 +226,12 @@ def auto_cleanup_if_needed(root: Path) -> list[str]:
     return notes
 
 
-def cleanup_note(root: Path) -> str:
+def cleanup_note(root: Path, *, aggressive: bool = False, include_runtime_env: bool = False) -> str:
+    include_runtime_env = include_runtime_env or aggressive
     notes = cleanup_empty_artifacts(root, keep_recent=0)
     notes.extend(cleanup_browser_artifacts(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
-        notes.extend(cleanup_downloads_screenshots_logs(root))
+        notes.extend(cleanup_downloads_screenshots_logs(root, include_runtime_env=include_runtime_env))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_runtime_caches(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:

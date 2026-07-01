@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_browser_skill.browser import dashboard, desktop
-from agent_browser_skill.core.args import timeout_from
+from agent_browser_skill.core.args import bool_arg, timeout_from
 from agent_browser_skill.core.artifacts import cleanup_note, path_size
 from agent_browser_skill.core.helpers import safe_slug
 from agent_browser_skill.core.locks import (
@@ -146,4 +146,9 @@ def action_set_profile_alias(root: Path, paths: dict[str, Path], args: dict[str,
 
 
 def action_cleanup(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    return cleanup_note(root), metadata(paths)
+    aggressive = bool_arg(args, "aggressive", False)
+    include_runtime_env = bool_arg(args, "include_runtime_env", False)
+    meta = metadata(paths)
+    meta["cleanup_aggressive"] = aggressive
+    meta["cleanup_include_runtime_env"] = include_runtime_env or aggressive
+    return cleanup_note(root, aggressive=aggressive, include_runtime_env=include_runtime_env), meta

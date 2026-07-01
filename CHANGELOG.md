@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.77
+
+- Kept Markdown and protected artifact read actions on the active browser profile when callers omit `profile`, preventing fallback to the default workflow state after profile-specific desktop sessions.
+- Added profile-qualified Markdown next-call guidance for `page_markdown` and `read_page_md` prompts and workflow metadata.
+- Changed cleanup so `node_env` is removed only when runtime-environment cleanup is explicitly requested with `include_runtime_env` or `aggressive`.
+
 ## 0.3.76
 
 - Ensured the browser tool CLI emits exactly one JSON object on stdout by redirecting stray runtime prints to stderr and recording a warning in the JSON payload.

@@ -121,13 +121,14 @@ def _text_artifact_workflow(
     page_kind: str = "generic_page",
     max_chars: int = 3000,
     user_message_hint: str | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     meta = build_browser_workflow(
         state="page_ready",
         user_action_required=False,
         recommended_next_action="page_markdown",
-        recommended_next_args={},
-        next_tool_call={"action": "page_markdown"},
+        recommended_next_args={"profile": profile} if profile else {},
+        next_tool_call={"action": "page_markdown", "profile": profile} if profile else {"action": "page_markdown"},
         allowed_next_actions=["page_markdown", "read_artifact", "navigate_pagination", "desktop_snapshot", "wait"],
         forbidden_next_actions=TEXT_EXTRACTION_FORBIDDEN_ACTIONS,
         artifact_policy=TEXT_ARTIFACT_POLICY,
@@ -955,11 +956,12 @@ def action_close_manual_access(root: Path, paths: dict[str, Path], args: dict[st
     return output, meta
 
 
-def _page_markdown_next_lines(*, legacy_text_file: Path | None = None) -> list[str]:
+def _page_markdown_next_lines(*, profile: str | None = None, legacy_text_file: Path | None = None) -> list[str]:
+    page_call = {"action": "page_markdown", **({"profile": profile} if profile else {})}
     lines = [
-        "PRIMARY_NEXT_TOOL_CALL: " + json.dumps({"action": "page_markdown"}, ensure_ascii=False),
+        "PRIMARY_NEXT_TOOL_CALL: " + json.dumps(page_call, ensure_ascii=False),
         "next_step: call page_markdown, read the Markdown artifact with read_page_md, choose the needed UI node_id from content, then use page_markdown.act; the action returns refreshed Markdown",
-        "next_tool_call: " + json.dumps({"action": "page_markdown"}, ensure_ascii=False),
+        "next_tool_call: " + json.dumps(page_call, ensure_ascii=False),
         "markdown_first_workflow: use Markdown content plus stable node_id values; specialized date/forum/search/table extractors and pagination helpers are optional fast paths only after Markdown inspection",
         "do_not_use_for_text_extraction: desktop_screenshot, read_file, run_command, raw fetch_page, curl, large raw evaluate, action=run",
     ]
@@ -983,8 +985,8 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
         remember_url(root, paths, url)
         output, meta = action_manual_desktop(root, paths, args)
         meta["desktop_open_started_manual_desktop"] = True
-        meta.update(_markdown_workflow_meta(None, None))
-        return "\n".join(["desktop_open_started_manual_desktop=true", output, *_page_markdown_next_lines()]), meta
+        meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
+        return "\n".join(["desktop_open_started_manual_desktop=true", output, *_page_markdown_next_lines(profile=paths["site"].name)]), meta
     remember_url(root, paths, url)
     try:
         desktop.desktop_navigate(args, url)
@@ -1000,7 +1002,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
         meta["desktop_open_recovered_stale_cdp"] = True
         meta["stale_cdp_error"] = str(exc)
         meta["manual_desktop_stop"] = stop_note
-        meta.update(_markdown_workflow_meta(None, None))
+        meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
         return "\n".join(
             [
                 "desktop_open_started_manual_desktop=true",
@@ -1008,7 +1010,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
                 f"stale_cdp_error: {exc}",
                 f"manual_desktop_stop: {stop_note}",
                 output,
-                *_page_markdown_next_lines(),
+                *_page_markdown_next_lines(profile=paths["site"].name),
             ]
         ), meta
     state_file, text_file = _state_artifacts(root, paths, "desktop-open-state", state)
@@ -1043,6 +1045,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
         if challenge_detected
         else _text_artifact_workflow(
             text_file=text_file,
+            profile=paths["site"].name,
             page_kind=page_kind,
             user_message_hint=(
                 "Read the exact text_file artifact before screenshots, raw evaluate, or other fallbacks; "
@@ -1058,7 +1061,7 @@ def action_desktop_open(root: Path, paths: dict[str, Path], args: dict[str, Any]
                 "next_tool_call: " + json.dumps({"action": "continue_after_manual", **continue_args}, ensure_ascii=False),
             ]
             if challenge_detected
-            else _page_markdown_next_lines(legacy_text_file=text_file)
+            else _page_markdown_next_lines(profile=paths["site"].name, legacy_text_file=text_file)
         )
     )
     return output, meta
@@ -1084,12 +1087,12 @@ def action_desktop_snapshot(root: Path, paths: dict[str, Path], args: dict[str, 
     page_kind = _page_kind(state.get("url"), state.get("title"), state.get("text"))
     if not challenge:
         remember_pending_page_markdown(root, paths, current_url=state.get("url"), title=state.get("title"), page_kind=page_kind)
-        meta.update(_markdown_workflow_meta(None, None))
+        meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
         meta["page_kind"] = page_kind
         meta["legacy_text_file"] = str(text_file)
     output = "\n".join(
         _state_summary_lines("desktop_snapshot", state, state_file, text_file, challenge)
-        + ([] if challenge else _page_markdown_next_lines(legacy_text_file=text_file))
+        + ([] if challenge else _page_markdown_next_lines(profile=paths["site"].name, legacy_text_file=text_file))
     )
     return output, meta
 
@@ -1270,7 +1273,7 @@ def action_scroll_until_stable(root: Path, paths: dict[str, Path], args: dict[st
     snap = write_json_artifact(root, paths, "scroll-stable-snapshot", result if isinstance(result, dict) else {"result": result})
     out, meta = _typed_page_summary(root, paths, "scroll_until_stable", result)
     meta.update({"snapshot_file": str(snap), "snapshot_id": __import__("agent_browser_skill.core.action_schemas", fromlist=["opaque_id"]).opaque_id(snap, "snap"), "current_url": (result or {}).get("url") if isinstance(result, dict) else None})
-    meta.update(_markdown_workflow_meta(None, None))
+    meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
     return out + f"\nsnapshot_id: {meta['snapshot_id']}\nnext_step: call page_markdown to refresh the Markdown snapshot after scrolling", meta
 
 
@@ -1472,7 +1475,7 @@ def action_navigate_pagination(root: Path, paths: dict[str, Path], args: dict[st
         }
     )
     if not challenge:
-        meta.update(_markdown_workflow_meta(None, None))
+        meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
     output = "\n".join(
         [
             f"navigate_pagination_ok=true",
@@ -1483,7 +1486,7 @@ def action_navigate_pagination(root: Path, paths: dict[str, Path], args: dict[st
             *(
                 [
                     "next_step: call page_markdown to refresh the Markdown snapshot before further navigation or answering",
-                    "next_tool_call: " + json.dumps({"action": "page_markdown"}, ensure_ascii=False),
+                    "next_tool_call: " + json.dumps({"action": "page_markdown", "profile": paths["site"].name}, ensure_ascii=False),
                 ]
                 if not challenge
                 else []
@@ -1573,13 +1576,13 @@ def action_downloads(root: Path, paths: dict[str, Path], args: dict[str, Any]) -
     return "\n".join(lines), meta
 
 
-def _markdown_workflow_meta(markdown_file: Path | None = None, artifact_id: str | None = None) -> dict[str, Any]:
+def _markdown_workflow_meta(markdown_file: Path | None = None, artifact_id: str | None = None, *, profile: str | None = None) -> dict[str, Any]:
     return build_browser_workflow(
         state="markdown_ready" if markdown_file else "read_markdown_next",
         user_action_required=False,
         recommended_next_action="read_page_md" if markdown_file else "page_markdown",
-        recommended_next_args={"max_chars": 3000} if markdown_file else {},
-        next_tool_call={"action": "read_page_md", "max_chars": 3000} if markdown_file else {"action": "page_markdown"},
+        recommended_next_args=({"profile": profile, "max_chars": 3000} if profile else {"max_chars": 3000}) if markdown_file else ({"profile": profile} if profile else {}),
+        next_tool_call=({"action": "read_page_md", "profile": profile, "max_chars": 3000} if profile else {"action": "read_page_md", "max_chars": 3000}) if markdown_file else ({"action": "page_markdown", "profile": profile} if profile else {"action": "page_markdown"}),
         allowed_next_actions=["read_page_md", "page_markdown.act", "read_artifact", "read_artifact_by_id", "search_artifact", "scroll_until_stable", "navigate_pagination", "find_text", "click_handle", "fill_handle", "select_handle", "click_text", "click_selector"],
         forbidden_next_actions=TEXT_EXTRACTION_FORBIDDEN_ACTIONS,
         artifact_policy={**TEXT_ARTIFACT_POLICY, "primary_artifact": "markdown", "artifact_id": artifact_id},
@@ -1613,9 +1616,9 @@ def action_page_markdown(root: Path, paths: dict[str, Path], args: dict[str, Any
     remember_pending_markdown_read(root, paths, markdown_file=md_file, elements_file=elements_file, artifact_id=artifact_id, current_url=snapshot["url"], title=snapshot["title"], max_chars=max_chars)
     meta = metadata(paths)
     meta.update({"manual_desktop_active": True, "current_url": snapshot["url"], "title": snapshot["title"], "markdown_file": str(md_file), "text_file": str(md_file), "artifact_id": artifact_id, "elements_file": str(elements_file), "elements_artifact_id": elements_id, "page_markdown_file": str(full_file), "revision": snapshot["revision"], "stable": snapshot["stable"], "content_md_length": len(snapshot["content_md"]), "ui_elements_count": len(snapshot["actionable_nodes"]), "warnings": snapshot.get("warnings") or [], **sizes})
-    meta.update(_markdown_workflow_meta(md_file, artifact_id))
+    meta.update(_markdown_workflow_meta(md_file, artifact_id, profile=paths["site"].name))
     excerpt = snapshot["markdown"][:max_chars] + ("\n...[truncated; read markdown_file artifact for full content]" if len(snapshot["markdown"]) > max_chars else "")
-    return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and UI node_id values, then use page_markdown.act for page-changing actions; it returns the refreshed Markdown", "next_tool_call: " + json.dumps({"action":"read_page_md","max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta
+    return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and UI node_id values, then use page_markdown.act for page-changing actions; it returns the refreshed Markdown", "next_tool_call: " + json.dumps({"action":"read_page_md","profile":paths["site"].name,"max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta
 
 
 def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -1709,7 +1712,7 @@ def action_click_handle(root: Path, paths: dict[str, Path], args: dict[str, Any]
         raise ToolError("handle is required for click_handle")
     el = _load_last_handle(root, paths, handle)
     output, meta = action_click(root, paths, {**args, "selector": el.get("selector") or selector_for_handle(handle)})
-    meta.update(_markdown_workflow_meta(None, None))
+    meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
     return "click_handle_ok=true\nhandle: " + handle + "\nnext_step: call page_markdown to refresh the Markdown snapshot after this page-changing action\n" + output, meta
 
 
@@ -1721,7 +1724,7 @@ def action_fill_handle(root: Path, paths: dict[str, Path], args: dict[str, Any])
         raise ToolError("text is required for fill_handle")
     el = _load_last_handle(root, paths, handle)
     output, meta = action_fill(root, paths, {**args, "selector": el.get("selector") or selector_for_handle(handle), "text": text})
-    meta.update(_markdown_workflow_meta(None, None))
+    meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
     return "fill_handle_ok=true\nhandle: " + handle + "\nnext_step: call page_markdown to refresh the Markdown snapshot after this page-changing action\n" + output, meta
 
 
@@ -1743,7 +1746,7 @@ def action_select_handle(root: Path, paths: dict[str, Path], args: dict[str, Any
     result = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), script, timeout=timeout_from(args))
     if not isinstance(result, dict) or not result.get("selected"):
         raise ToolError(f"select_handle failed: {result.get('reason') if isinstance(result, dict) else 'unknown'}")
-    meta = metadata(paths); meta.update({"manual_desktop_active": True, "handle": handle, "selector": selector}); meta.update(_markdown_workflow_meta(None, None))
+    meta = metadata(paths); meta.update({"manual_desktop_active": True, "handle": handle, "selector": selector}); meta.update(_markdown_workflow_meta(None, None, profile=paths["site"].name))
     return "select_handle_ok=true\nhandle: " + handle + f"\nselector: {selector}\nnext_step: call page_markdown to refresh the Markdown snapshot after this page-changing action", meta
 
 
