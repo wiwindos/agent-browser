@@ -18,7 +18,7 @@ from agent_browser_skill.core.artifacts import auto_cleanup_if_needed, path_size
 from agent_browser_skill.core import locks as core_locks
 from agent_browser_skill.core.output import cap_output, load_request, pid_running, redact, workspace_root
 from agent_browser_skill.core.paths import paths_for, remembered_url
-from agent_browser_skill.core.workflow import workflow_gate_guard_response
+from agent_browser_skill.core.workflow import pending_workflow_gate, workflow_gate_guard_response
 from agent_browser_skill.core.structured_logs import append_tool_log, make_run_id
 from agent_browser_skill.errors import BrowserBusyError, ToolError
 from agent_browser_skill.result import ToolResult
@@ -89,7 +89,7 @@ def _suggested_next_action(action: str, state: dict) -> str | None:
             return "page_markdown"
         return "scroll_until_stable" if "scroll_until_stable" in allowed else ("wait_ready" if "wait_ready" in allowed else (allowed[0] if allowed else None))
     if action == "status" and state.get("phase") in {"READY", "LOADED"}:
-        for candidate in ("get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
+        for candidate in ("page_markdown", "read_page_md", "search_artifact", "get_page_text", "extract_links", "extract_forum_posts", "screenshot"):
             if candidate in allowed:
                 return candidate
     return allowed[0] if allowed else None
@@ -222,6 +222,12 @@ def run_request(request: dict) -> dict:
                 },
             )
             return payload
+        debug_admin = bool_arg(args, "debug_admin", False)
+        legacy_mode = bool_arg(args, "legacy", False) or bool_arg(args, "allow_legacy_run", False)
+        if requested_action in {"command.run", "plugin.run", "plugin run"} or (requested_action == "run" and not (debug_admin or legacy_mode)):
+            raise ToolError(f"BLOCKED_SAFE_PROFILE: {requested_action} is not available in the default/safe browser workflow; use page_markdown/page_markdown.act or typed browser actions, or pass debug_admin=true/legacy=true for explicit diagnostics")
+        if action == "evaluate" and str(args.get("profile") or "").strip().lower() == "safe":
+            raise ToolError("BLOCKED_SAFE_PROFILE: evaluate is not available in the safe browser profile; use page_markdown/page_markdown.act")
         if action not in ACTIONS:
             if action == "send_file":
                 raise ToolError(
@@ -248,6 +254,20 @@ def run_request(request: dict) -> dict:
         if action in LOCKLESS_ACTIONS:
             cleanup_notes = []
             paths = paths_for(root, args)
+            pending_gate = pending_workflow_gate(root, paths)
+            pending_action = str((pending_gate or {}).get("pending_next_action") or "")
+            pending_allowlist = {"page_markdown", "read_page_md", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
+            gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
+            if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist:
+                output, meta = gated
+                base_meta = metadata(paths)
+                base_meta.update(meta)
+                state["pending_next_action"] = meta.get("recommended_next_action")
+                state["pending_next_tool_call"] = meta.get("next_tool_call")
+                state["next_allowed_actions"] = list(dict.fromkeys([str(meta.get("recommended_next_action") or "page_markdown"), *(state.get("next_allowed_actions") or [])]))
+                payload = _error_payload("BLOCKED_PENDING_WORKFLOW_GATE", output, requested_action, state, current_warnings, suggested_next_action=str(meta.get("recommended_next_action") or "page_markdown"))
+                payload["metadata"] = base_meta
+                return payload
             output, meta = ACTIONS[action](root, paths, args)
         else:
             with core_locks.BrowserToolLock(
@@ -258,15 +278,19 @@ def run_request(request: dict) -> dict:
             ):
                 cleanup_notes = auto_cleanup_if_needed(root)
                 paths = paths_for(root, args)
+                pending_gate = pending_workflow_gate(root, paths)
+                pending_action = str((pending_gate or {}).get("pending_next_action") or "")
+                pending_allowlist = {"page_markdown", "read_page_md", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
                 gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
-                if gated and requested_action in {"fetch_page", "run_command", "write_file", "run", "evaluate", "get_page_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_forum_posts", "find_text", "desktop_screenshot", "screenshot", "read_file"}:
+                if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist:
                     output, meta = gated
                     base_meta = metadata(paths)
                     base_meta.update(meta)
                     state["pending_next_action"] = meta.get("recommended_next_action")
                     state["pending_next_tool_call"] = meta.get("next_tool_call")
                     state["next_allowed_actions"] = list(dict.fromkeys([str(meta.get("recommended_next_action") or "page_markdown"), *(state.get("next_allowed_actions") or [])]))
-                    payload = _unified_payload(ToolResult.ok(output, base_meta, status="blocked").to_payload(redact=redact, cap_output=cap_output), requested_action, state, root)
+                    payload = _error_payload("BLOCKED_PENDING_WORKFLOW_GATE", output, requested_action, state, current_warnings, suggested_next_action=str(meta.get("recommended_next_action") or "page_markdown"))
+                    payload["metadata"] = base_meta
                     return payload
                 busy = core_locks.guard_manual_browser_resource(
                     root,
@@ -366,7 +390,7 @@ def run_request(request: dict) -> dict:
         if state.get("pending_next_action"):
             state["next_allowed_actions"] = list(dict.fromkeys([state["pending_next_action"], *state["next_allowed_actions"]]))
         if requested_action == "status" and state.get("phase") in {"READY", "LOADED"}:
-            preferred = ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
+            preferred = ["page_markdown", "read_page_md", "search_artifact", "get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
             state["next_allowed_actions"] = list(dict.fromkeys([*preferred, *state["next_allowed_actions"]]))
         state["last_error"] = None
         save_state(root, state)

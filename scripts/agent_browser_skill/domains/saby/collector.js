@@ -2,7 +2,7 @@
   "use strict";
 
   const options = window.__SABY_TENDERS_OPTIONS__ || {};
-  const SCRIPT_VERSION = "0.3.62";
+  const SCRIPT_VERSION = "0.3.74";
   const STARTED_AT = Date.now();
   const MAX_RUNTIME_MS = Math.max(0, Number(options.maxRuntimeMs || 0));
   const SELECTORS = options.selectors || {};

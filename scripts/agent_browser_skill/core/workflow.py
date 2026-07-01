@@ -253,20 +253,21 @@ def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str 
         "primary_loop": [
             "desktop_open",
             "page_markdown",
-            "reason_over_markdown_and_ui_handles",
-            "click_handle/fill_handle/select_handle or other focused action",
-            "page_markdown_after_each_page_changing_action",
+            "reason_over_page_markdown_content_and_ui_node_ids",
+            "choose_the_needed_node_id",
+            "page_markdown.act_click_fill_type_select_or_submit",
+            "use_returned_action_page_markdown_as_next_state",
         ],
-        "read_primary_source": "Read the Markdown snapshot artifact first; use query/regex against it for dates and target text.",
+        "read_primary_source": "Read page_markdown/read_page_md first, reason over content and UI node_id values, and use page_markdown.act for page-changing actions.",
         "artifact_id": artifact_id,
         "markdown_file": markdown_file,
         "after_page_change": {"action": "page_markdown"},
         "bounded_autonomy": {
             "max_page_changing_steps": 8,
-            "if_not_found": "try pagination, filters, show/load more controls, or scroll_until_stable before returning a partial result",
+            "if_not_found": "use visible next/previous/show-more/filter/search controls through page_markdown.act, or scroll_until_stable, before returning a partial result",
             "stop_condition": "answer when evidence is found or report partial result after bounded attempts",
         },
-        "specialized_extractors": "Optional fast path only when Markdown shows the page matches article/table/search/date/forum patterns.",
+        "specialized_extractors": "Optional fast path only after Markdown inspection shows the generic node workflow can be accelerated; never the primary workflow.",
     }
 
 

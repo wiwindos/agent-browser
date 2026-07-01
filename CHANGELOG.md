@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.3.75
+
+- Hardened Markdown-first workflow gates so pending `page_markdown`/`read_page_md` steps block legacy action escape hatches with `BLOCKED_PENDING_WORKFLOW_GATE`.
+- Blocked default `action=run` usage unless explicitly requested for debug/legacy mode.
+- Added live page signatures to Markdown mappings so `page_markdown.act` detects page changes that happen before a new Markdown revision is built.
+- Updated `read_page_md` guidance to point directly to a templated `page_markdown.act` next call and clarified that Markdown node IDs are revision-scoped.
+
+## 0.3.74
+
+- Removed the obsolete vendored `snitchmd-master/` upstream snapshot from the repository.
+- Refactored runtime dependency installation helpers to share apt update/install and Chrome verification logic without changing browser behavior.
+- Added a bilingual English/Russian README with repository overview, workflows, checks, and release notes guidance.
+- Updated repository agent instructions to reflect the slimmer repository structure.
+
+## 0.3.73
+
+- Hardened the Markdown-first action workflow with explicit stale-revision, non-actionable-node, ambiguous-rebind, and safe-profile blocking errors.
+- Ensured `page_markdown.act` remains the required page-changing path by settling and rebuilding Markdown after node actions.
+
+## 0.3.72
+
+- Promoted the universal `page_markdown` -> `read_page_md` -> `page_markdown.act` loop as the primary agentic browser workflow for catalogs, forums, search results, tables, personal accounts, SPAs, and show-more/next controls.
+- Reframed specialized extractors and `navigate_pagination` as optional fast paths after Markdown inspection instead of the default route.
+- Updated runner suggestions and workflow metadata so status and blocked-browser recovery prefer Markdown-node actions before legacy text/forum extractors.
+
+## 0.3.71
+
+- Added `page_markdown.act` to perform click/fill/type/select/submit against Markdown `node_id` targets and return a refreshed `action_page_markdown` snapshot in the same action cycle.
+- Added revision-guarded Markdown node resolution plus workflow/schema/tool metadata so agents can prefer `node_id` actions over selectors and legacy handles.
+
+## 0.3.70
+
+- Added the `PageMarkdownArtifact` runtime representation with revision, URL/title, Markdown, node/action maps, warnings, and stability metadata.
+- Added `page_markdown.get` as an explicit action alias that returns Markdown-first page state and writes the full page-markdown artifact.
+
+## 0.3.69
+
+- Added root `AGENTS.md` with AI-agent development rules, required version/changelog workflow, repository structure, and file responsibility map.
+- Synchronized the Python and manifest skill versions for the documentation-policy update.
+
 ## 0.3.68
 
 - Added typed minimal vertical forum actions: `wait_ready`, `scroll_until_stable`, `extract_forum_posts`, `read_artifact_slice`, and `summarize_artifact`.

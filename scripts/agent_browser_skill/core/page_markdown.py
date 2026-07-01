@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -12,15 +13,48 @@ def _esc(text: Any) -> str:
     return _clean(text).replace("|", "\\|")
 
 
+@dataclass(frozen=True)
+class PageMarkdownArtifact:
+    revision: int
+    url: str
+    title: str
+    markdown: str
+    nodes: list[dict[str, Any]] = field(default_factory=list)
+    actionable_nodes: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    stable: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _revision_from_dom(dom: dict[str, Any]) -> int:
+    raw = dom.get("revision")
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _node_from_element(element: dict[str, Any]) -> dict[str, Any]:
+    node_id = str(element.get("node_id") or element.get("handle") or "")
+    node = dict(element)
+    node["node_id"] = node_id
+    node.setdefault("handle", node_id)
+    node.setdefault("actionable", bool(node_id))
+    return node
+
+
 def selector_for_handle(handle: str) -> str:
     return f'[data-agent-browser-handle="{handle}"]'
 
 
-def build_snapshot_from_dom(dom: dict[str, Any]) -> dict[str, Any]:
+def build_page_markdown_artifact(dom: dict[str, Any]) -> PageMarkdownArtifact:
     url = str(dom.get("url") or "")
     title = str(dom.get("title") or "")
     blocks = dom.get("blocks") if isinstance(dom.get("blocks"), list) else []
     elements = dom.get("elements") if isinstance(dom.get("elements"), list) else []
+    nodes = [_node_from_element(e) for e in elements if isinstance(e, dict)]
     warnings = list(dom.get("warnings") or []) if isinstance(dom.get("warnings"), list) else []
 
     content_lines: list[str] = []
@@ -54,7 +88,7 @@ def build_snapshot_from_dom(dom: dict[str, Any]) -> dict[str, Any]:
     content_md = "\n\n".join(content_lines).strip()
 
     ui_lines = []
-    for e in elements:
+    for e in nodes:
         if not isinstance(e, dict):
             continue
         handle = str(e.get("handle") or "")
@@ -69,29 +103,74 @@ def build_snapshot_from_dom(dom: dict[str, Any]) -> dict[str, Any]:
         ui_lines.append(f"[{handle}] {label}{suffix}".strip())
     ui_md = "\n".join(ui_lines).strip()
     markdown = f"# {title or url or 'Page'}\n\n## Content\n\n{content_md or '_No readable content extracted._'}\n\n## UI elements\n\n{ui_md or '_No interactive elements found._'}\n"
-    if len(blocks) >= int(dom.get("maxBlocks") or 0):
-        warnings.append("content block limit reached; snapshot may be incomplete")
-    return {
-        "url": url,
-        "title": title,
-        "markdown": markdown,
+    max_blocks = int(dom.get("maxBlocks") or 0)
+    max_elements = int(dom.get("maxElements") or 0)
+    if max_blocks and len(blocks) >= max_blocks:
+        warnings.append("content block limit reached; page_markdown may be incomplete")
+    if max_elements and len(nodes) >= max_elements:
+        warnings.append("interactive element limit reached; action map may be incomplete")
+    stable = not warnings and bool(dom.get("stable", True))
+    return PageMarkdownArtifact(
+        revision=_revision_from_dom(dom),
+        url=url,
+        title=title,
+        markdown=markdown,
+        nodes=nodes,
+        actionable_nodes=[n for n in nodes if n.get("node_id")],
+        warnings=warnings,
+        stable=stable,
+    )
+
+
+def build_snapshot_from_dom(dom: dict[str, Any]) -> dict[str, Any]:
+    artifact = build_page_markdown_artifact(dom)
+    blocks = dom.get("blocks") if isinstance(dom.get("blocks"), list) else []
+    content_md = artifact.markdown.split("## Content", 1)[-1].split("## UI elements", 1)[0].strip() if "## Content" in artifact.markdown else artifact.markdown
+    ui_md = artifact.markdown.split("## UI elements", 1)[-1].strip() if "## UI elements" in artifact.markdown else ""
+    data = artifact.to_dict()
+    data.update({
         "content_md": content_md,
         "ui_md": ui_md,
-        "elements": elements,
+        "elements": artifact.actionable_nodes,
         "metadata": {
             "source": "live_dom_cdp",
+            "representation": "page_markdown",
             "content_blocks": len(blocks),
-            "interactive_elements": len(elements),
-            "warnings": warnings,
+            "interactive_elements": len(artifact.actionable_nodes),
+            "revision": artifact.revision,
+            "stable": artifact.stable,
+            "warnings": artifact.warnings,
+            "live_signature": dom.get("live_signature") if isinstance(dom.get("live_signature"), dict) else {},
         },
-        "warnings": warnings,
-    }
+    })
+    return data
+
+
+def live_signature_script() -> str:
+    return """
+(() => {
+  const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const text = clean((document.body && document.body.innerText) || '');
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return {
+    url: location.href,
+    title: document.title,
+    readyState: document.readyState,
+    body_text_hash: String(hash >>> 0),
+    dom_node_count: document.getElementsByTagName('*').length,
+    timestamp: Date.now()
+  };
+})()
+"""
 
 
 def dom_extraction_script(max_blocks: int = 220, max_elements: int = 250) -> str:
     return rf"""
 (() => {{
-  const maxBlocks = {int(max_blocks)}; const maxElements = {int(max_elements)};
+  const maxBlocks = {int(max_blocks)}; const maxElements = {int(max_elements)}; window.__agentBrowserPageMarkdownRevision = (window.__agentBrowserPageMarkdownRevision || 0) + 1;
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   const box = (el) => {{ const r = el.getBoundingClientRect(); return {{x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height)}}; }};
@@ -130,8 +209,12 @@ def dom_extraction_script(max_blocks: int = 220, max_elements: int = 250) -> str
     const tag = el.tagName.toLowerCase(); const role = el.getAttribute('role') || (tag === 'a' ? 'link' : tag === 'button' ? 'button' : tag);
     let kind = tag === 'a' ? 'link' : tag === 'textarea' ? 'textarea' : tag === 'select' ? 'select' : tag === 'input' ? 'input' : role === 'link' ? 'link' : 'button';
     counters[kind] = (counters[kind] || 0) + 1; const handle = `${{kind}}:${{counters[kind]}}`; el.setAttribute('data-agent-browser-handle', handle);
-    elements.push({{handle, tag, role, text: clean(el.innerText || el.textContent), label: labelFor(el), href: el.href || null, selector: `[data-agent-browser-handle="${{handle}}"]`, fallback_selector: cssPath(el), bounding_box: box(el), visible: true, disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', input_type: el.type || null, value: ('value' in el ? String(el.value).slice(0,200) : null), placeholder: el.placeholder || null}});
+    elements.push({{node_id: handle, handle, tag, role, text: clean(el.innerText || el.textContent), label: labelFor(el), href: el.href || null, selector: `[data-agent-browser-handle="${{handle}}"]`, fallback_selector: cssPath(el), bounding_box: box(el), visible: true, disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', input_type: el.type || null, value: ('value' in el ? String(el.value).slice(0,200) : null), placeholder: el.placeholder || null}});
   }}
-  return {{url: location.href, title: document.title, blocks, elements, maxBlocks, maxElements, warnings: []}};
+  const bodyText = clean((document.body && document.body.innerText) || '');
+  let bodyHash = 0;
+  for (let i = 0; i < bodyText.length; i++) bodyHash = ((bodyHash << 5) - bodyHash + bodyText.charCodeAt(i)) | 0;
+  const live_signature = {{url: location.href, title: document.title, readyState: document.readyState, body_text_hash: String(bodyHash >>> 0), dom_node_count: document.getElementsByTagName('*').length, timestamp: Date.now()}};
+  return {{revision: window.__agentBrowserPageMarkdownRevision, url: location.href, title: document.title, blocks, elements, maxBlocks, maxElements, warnings: [], stable: document.readyState === 'complete', live_signature}};
 }})()
 """

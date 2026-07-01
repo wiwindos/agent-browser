@@ -33,6 +33,8 @@ def action_batch(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tu
 
 
 def action_run(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    if str(args.get("profile") or "").strip().lower() == "safe":
+        raise ToolError("BLOCKED_SAFE_PROFILE: run/command execution is not available in the safe browser profile")
     task = str(args.get("task") or "").strip()
     if not task:
         raise ToolError("task is required for run")

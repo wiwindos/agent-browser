@@ -8,15 +8,15 @@ from typing import Any, Callable
 
 from agent_browser_skill.errors import ToolError
 
-ERROR_CODES = {"VALIDATION_ERROR", "NAVIGATION_ERROR", "EXTRACTION_ERROR", "BLOCKED", "INTERNAL_ERROR"}
+ERROR_CODES = {"VALIDATION_ERROR", "NAVIGATION_ERROR", "EXTRACTION_ERROR", "BLOCKED", "BLOCKED_PENDING_WORKFLOW_GATE", "INTERNAL_ERROR"}
 PHASES = ["NEW", "OPENED", "READY", "LOADED", "MARKDOWN_READY", "EXTRACTED", "ANSWER_READY", "DONE"]
 NEXT_ALLOWED = {
     "NEW": ["open_page", "desktop_open", "list_artifacts"],
     "OPENED": ["wait_ready", "screenshot", "desktop_open"],
-    "READY": ["wait_ready", "page_markdown", "read_page_md", "click_handle", "fill_handle", "select_handle", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
-    "LOADED": ["wait_ready", "page_markdown", "read_page_md", "click_handle", "fill_handle", "select_handle", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
-    "MARKDOWN_READY": ["read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "click_handle", "fill_handle", "select_handle", "page_markdown", "scroll_until_stable", "navigate_pagination", "click_text", "click_selector", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "summarize_artifact", "list_artifacts"],
-    "EXTRACTED": ["read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "click_handle", "fill_handle", "select_handle", "page_markdown", "scroll_until_stable", "navigate_pagination", "filter_by_date", "summarize_posts", "summarize_artifact", "list_artifacts"],
+    "READY": ["wait_ready", "page_markdown", "read_page_md", "page_markdown.act", "click_handle", "fill_handle", "select_handle", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
+    "LOADED": ["wait_ready", "page_markdown", "read_page_md", "page_markdown.act", "click_handle", "fill_handle", "select_handle", "get_page_text", "get_title", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "scroll_until_stable", "click_text", "click_selector", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "screenshot", "list_artifacts"],
+    "MARKDOWN_READY": ["read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "page_markdown.act", "click_handle", "fill_handle", "select_handle", "page_markdown", "scroll_until_stable", "navigate_pagination", "click_text", "click_selector", "find_text", "extract_links", "extract_blocks", "extract_article", "extract_table", "extract_search_results", "extract_updates_by_date", "extract_forum_posts", "filter_by_date", "summarize_posts", "summarize_artifact", "list_artifacts"],
+    "EXTRACTED": ["read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "page_markdown.act", "click_handle", "fill_handle", "select_handle", "page_markdown", "scroll_until_stable", "navigate_pagination", "filter_by_date", "summarize_posts", "summarize_artifact", "list_artifacts"],
     "ANSWER_READY": ["list_artifacts", "open_page", "desktop_open"],
     "DONE": ["open_page", "desktop_open", "list_artifacts"],
 }
@@ -43,6 +43,8 @@ SCHEMAS: dict[str, Schema] = {
     "open": Schema({"url": Field(str, True), "profile": Field(str, False, "default"), "wait_until": Field(str, False, "networkidle", {"load", "domcontentloaded", "networkidle"}), "json": Field(bool, False, True)}, {"url_or_page": "url"}),
     "desktop_open": Schema({"url": Field(str), "profile": Field(str, False, "default"), "wait_until": Field(str, False, "domcontentloaded")}, {"url_or_page": "url"}),
     "page_markdown": Schema({"max_chars": Field(int, False, 3000, min_value=500, max_value=12000), "max_blocks": Field(int, False, 220, min_value=20, max_value=1000), "max_elements": Field(int, False, 250, min_value=20, max_value=1000)}),
+    "page_markdown.get": Schema({"max_chars": Field(int, False, 3000, min_value=500, max_value=12000), "max_blocks": Field(int, False, 220, min_value=20, max_value=1000), "max_elements": Field(int, False, 250, min_value=20, max_value=1000)}),
+    "page_markdown.act": Schema({"node_id": Field(str, True), "node_action": Field(str), "operation": Field(str), "act": Field(str), "revision": Field((int, str)), "text": Field(str), "value": Field(str), "max_chars": Field(int, False, 3000, min_value=500, max_value=12000), "max_blocks": Field(int, False, 220, min_value=20, max_value=1000), "max_elements": Field(int, False, 250, min_value=20, max_value=1000), "settle_seconds": Field((int, float), False, 1, min_value=0, max_value=10)}),
     "read_page_md": Schema({"max_chars": Field(int, False, 3000, min_value=100, max_value=12000), "mode": Field(str, False, "head", {"head", "tail"}), "query": Field(str), "regex": Field(str), "context_lines": Field(int, False, 5, min_value=0, max_value=20)}),
     "read_artifact": Schema({"path": Field(str), "file": Field(str), "artifact_id": Field(str), "mode": Field(str, False, "head", {"head", "tail"}), "max_chars": Field(int, False, 3000, min_value=100, max_value=12000), "query": Field(str), "regex": Field(str), "context_lines": Field(int, False, 5, min_value=0, max_value=20)}),
     "click_handle": Schema({"handle": Field(str, True)}),
@@ -72,7 +74,7 @@ SCHEMAS: dict[str, Schema] = {
     "summarize_posts": Schema({"posts": Field((list, dict, str), True)}),
     "summarize_artifact": Schema({"artifact_id": Field(str, True), "query": Field(str)}),
 }
-ACTION_ALIASES = {"open_page": "open"}
+ACTION_ALIASES = {"open_page": "open", "page_markdown.get": "page_markdown.get"}
 
 
 def _coerce(name: str, value: Any, field: Field) -> Any:
@@ -171,7 +173,7 @@ def phase_after(action: str, success: bool, meta: dict[str, Any]) -> str | None:
     if action in {"open_page", "open"}: return "READY" if meta.get("snapshot_file") else "OPENED"
     if action == "desktop_open": return "READY" if meta.get("text_file") else "OPENED"
     if action == "desktop_snapshot": return "READY" if meta.get("text_file") else "OPENED"
-    if action == "page_markdown": return "MARKDOWN_READY"
+    if action in {"page_markdown", "page_markdown.get", "page_markdown.act"}: return "MARKDOWN_READY"
     if action == "read_page_md": return "EXTRACTED"
     if action in {"wait_ready", "wait"}: return "READY"
     if action == "scroll_until_stable": return "LOADED"

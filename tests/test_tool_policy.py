@@ -9,6 +9,8 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from agent_browser_skill.core.action_schemas import save_state
+from agent_browser_skill.core.paths import paths_for
+from agent_browser_skill.core.workflow import remember_pending_page_markdown
 from agent_browser_skill.runner import run_request
 
 
@@ -132,8 +134,8 @@ def test_browser_sequence_returns_structured_guidance_not_shell(tmp_path: Path, 
     assert results[1]["suggested_next_action"] == "page_markdown"
     assert results[2]["state"]["phase"] == "READY"
     assert results[2]["suggested_next_action"] == "wait_ready"
-    assert results[3]["suggested_next_action"] == "get_page_text"
-    assert results[3]["next_allowed_actions"][:4] == ["get_page_text", "extract_links", "extract_forum_posts", "screenshot"]
+    assert results[3]["suggested_next_action"] == "page_markdown"
+    assert results[3]["next_allowed_actions"][:4] == ["page_markdown", "read_page_md", "search_artifact", "get_page_text"]
 
 
 def test_observed_4pda_browser_workflow_gate_sequence(tmp_path: Path, monkeypatch) -> None:
@@ -211,3 +213,36 @@ def test_desktop_open_without_url_preserves_4pda_profile_in_error(tmp_path: Path
     assert "page_markdown" in out["message"]
     assert out["state"]["profile"] == "4pda.to"
     assert "profile=default" not in out["message"]
+
+
+def test_safe_profile_blocks_raw_execution_actions(tmp_path):
+    for action in ("evaluate", "run", "command.run", "plugin.run"):
+        out = _run(tmp_path, {"action": action, "profile": "safe", "script": "1+1", "task": "echo hi"})
+        assert out["success"] is False
+        assert "BLOCKED_SAFE_PROFILE" in out["message"]
+
+
+def test_pending_markdown_gate_blocks_legacy_click_escape_hatch(tmp_path: Path, monkeypatch) -> None:
+    paths = paths_for(tmp_path, {"action": "test", "profile": "gate"})
+    remember_pending_page_markdown(tmp_path, paths, current_url="https://example.test")
+
+    def fake_click(root, paths, args):
+        return "clicked", {"current_url": "https://example.test"}
+
+    monkeypatch.setattr("agent_browser_skill.runner.ACTIONS", {"click": fake_click})
+    monkeypatch.setattr("agent_browser_skill.runner.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.core.locks.guard_manual_browser_resource", lambda *a, **k: None)
+
+    out = _run(tmp_path, {"action": "click", "profile": "gate", "selector": "button"})
+
+    assert out["ok"] is False
+    assert out["error_code"] == "BLOCKED_PENDING_WORKFLOW_GATE"
+    assert out["metadata"]["guard_reason"] == "pending browser workflow gate must be completed first"
+    assert out["suggested_next_action"] == "page_markdown"
+
+
+def test_run_blocked_by_default_unless_debug_admin(tmp_path: Path) -> None:
+    out = _run(tmp_path, {"action": "run", "task": "echo diagnostic"})
+
+    assert out["success"] is False
+    assert "BLOCKED_SAFE_PROFILE" in out["message"]
