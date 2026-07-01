@@ -82,7 +82,7 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 - `actions_generic.py` — generic page/browser actions such as open, snapshot, click, fill, wait, and extraction helpers.
 - `actions_auth.py` — login/session/profile authentication actions.
 - `actions_manual.py` — manual desktop/noVNC/challenge handoff actions, Markdown-node action cycle (`page_markdown.act`), and Markdown artifact reads.
-- `actions_maintenance.py` — status, cleanup, close, recover, and maintenance actions.
+- `actions_maintenance.py` — status, cleanup, close, recover, workflow-gate clearing, and maintenance actions.
 - `actions_artifacts.py` — protected browser-artifact read/list/search helpers.
 - `actions_extractors.py` — typed content extraction actions.
 - `actions_batch.py` — batch command execution support.
@@ -93,7 +93,7 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 
 - `args.py` — CLI/action argument parsing and normalization.
 - `action_schemas.py` — action schema definitions and validation helpers.
-- `artifacts.py` — artifact path handling and artifact write/read support.
+- `artifacts.py` — artifact path handling, artifact write/read support, workspace top-directory reporting, and browser-owned cleanup helpers.
 - `config.py` — runtime configuration loading and defaults.
 - `helpers.py` — shared small helper functions.
 - `locks.py` — lock handling for browser/manual-session concurrency.
@@ -101,7 +101,7 @@ If you change JavaScript collectors or fixtures, also run targeted Node-based ch
 - `page_markdown.py` — canonical page Markdown runtime representation (`PageMarkdownArtifact`), DOM-to-Markdown conversion, live signature capture, and revision-scoped node/action map generation.
 - `paths.py` — repository/runtime path calculation.
 - `patterns.py` — shared regex/string matching patterns.
-- `profiles.py` — browser profile aliasing and profile resolution.
+- `profiles.py` — browser profile aliasing and canonical profile resolution, including built-in Saby and 4PDA aliases.
 - `snapshot_artifacts.py` — snapshot artifact creation and metadata handling.
 - `structured_logs.py` — structured log emission helpers.
 - `tool_policy.py` — safety policy and validation for allowed/forbidden tool behavior.

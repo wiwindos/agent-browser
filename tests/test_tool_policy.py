@@ -246,3 +246,40 @@ def test_run_blocked_by_default_unless_debug_admin(tmp_path: Path) -> None:
 
     assert out["success"] is False
     assert "BLOCKED_SAFE_PROFILE" in out["message"]
+
+
+def test_markdown_and_artifact_reads_follow_active_profile(tmp_path: Path) -> None:
+    active = tmp_path / ".agent-browser" / "profiles" / "4pda.to"
+    active.mkdir(parents=True)
+    (tmp_path / ".agent-browser" / "active-profile").write_text(str(active), encoding="utf-8")
+
+    for action in [
+        "page_markdown",
+        "page_markdown.get",
+        "read_page_md",
+        "read_artifact",
+        "read_artifact_by_id",
+        "search_artifact",
+        "read_artifact_slice",
+        "summarize_artifact",
+    ]:
+        paths = paths_for(tmp_path, {"action": action})
+        assert paths["site"].name == "4pda.to"
+
+
+def test_cleanup_preserves_node_env_unless_runtime_env_requested(tmp_path: Path) -> None:
+    from agent_browser_skill.core.artifacts import cleanup_downloads_screenshots_logs
+
+    downloads = tmp_path / "browser-artifacts" / "4pda.to" / "run" / "downloads"
+    downloads.mkdir(parents=True)
+    (downloads / "file.bin").write_bytes(b"x")
+    node_env = tmp_path / "node_env"
+    node_env.mkdir()
+    (node_env / "runtime.txt").write_text("keep", encoding="utf-8")
+
+    cleanup_downloads_screenshots_logs(tmp_path)
+    assert not downloads.exists()
+    assert node_env.exists()
+
+    cleanup_downloads_screenshots_logs(tmp_path, include_runtime_env=True)
+    assert not node_env.exists()

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
+import sys
 import json
 import subprocess
 import re
@@ -18,6 +21,7 @@ from agent_browser_skill.core.artifacts import auto_cleanup_if_needed, path_size
 from agent_browser_skill.core import locks as core_locks
 from agent_browser_skill.core.output import cap_output, load_request, pid_running, redact, workspace_root
 from agent_browser_skill.core.paths import paths_for, remembered_url
+from agent_browser_skill.core.profiles import site_key_from
 from agent_browser_skill.core.workflow import pending_workflow_gate, workflow_gate_guard_response
 from agent_browser_skill.core.structured_logs import append_tool_log, make_run_id
 from agent_browser_skill.errors import BrowserBusyError, ToolError
@@ -201,6 +205,16 @@ def run_request(request: dict) -> dict:
         requested_action = str(args.get("_requested_action") or action)
         session_id = str(args.get("session_id") or args.get("_context", {}).get("session_id") or "default")
         state = load_state(root, session_id)
+        requested_profile_key = site_key_from(args, root)
+        explicit_profile_request = bool(args.get("profile") or args.get("site_key") or args.get("url"))
+        if explicit_profile_request and state.get("profile") and state.get("profile") != requested_profile_key:
+            state.pop("pending_next_action", None)
+            state.pop("pending_next_tool_call", None)
+            state.pop("artifact_id", None)
+            state.pop("last_snapshot_id", None)
+            state["phase"] = "NEW"
+        if explicit_profile_request or not state.get("profile"):
+            state["profile"] = requested_profile_key
         blocked, block_message = protected_browser_content_request(requested_action, args)
         if blocked:
             state["next_allowed_actions"] = list(dict.fromkeys([*BROWSER_CONTENT_ACTIONS, *(state.get("next_allowed_actions") or [])]))
@@ -256,9 +270,9 @@ def run_request(request: dict) -> dict:
             paths = paths_for(root, args)
             pending_gate = pending_workflow_gate(root, paths)
             pending_action = str((pending_gate or {}).get("pending_next_action") or "")
-            pending_allowlist = {"page_markdown", "read_page_md", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
+            pending_allowlist = {"page_markdown", "read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "list_artifacts", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
             gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
-            if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist:
+            if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist and not (requested_action == "desktop_open" and not manual_desktop_running(root)):
                 output, meta = gated
                 base_meta = metadata(paths)
                 base_meta.update(meta)
@@ -280,9 +294,9 @@ def run_request(request: dict) -> dict:
                 paths = paths_for(root, args)
                 pending_gate = pending_workflow_gate(root, paths)
                 pending_action = str((pending_gate or {}).get("pending_next_action") or "")
-                pending_allowlist = {"page_markdown", "read_page_md", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
+                pending_allowlist = {"page_markdown", "read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "list_artifacts", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
                 gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
-                if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist:
+                if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist and not (requested_action == "desktop_open" and not manual_desktop_running(root)):
                     output, meta = gated
                     base_meta = metadata(paths)
                     base_meta.update(meta)
@@ -378,7 +392,7 @@ def run_request(request: dict) -> dict:
         new_phase = phase_after(requested_action, True, meta) or phase_after(action, True, meta)
         if new_phase:
             state["phase"] = new_phase
-        state["profile"] = str(meta.get("site_key") or state.get("profile") or "default")
+        state["profile"] = str(meta.get("site_key") or requested_profile_key or state.get("profile") or "default")
         state["current_url"] = meta.get("current_url") or args.get("url") or state.get("current_url")
         for key, prefix, state_key in (("text_file", "art", "artifact_id"), ("artifact_file", "art", "artifact_id"), ("snapshot_file", "snap", "last_snapshot_id"), ("screenshot", "snap", "last_snapshot_id")):
             if meta.get(key):
@@ -489,6 +503,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--request", required=True)
     ns = parser.parse_args()
-    data = run_request(load_request(Path(ns.request)))
+    captured_stdout = io.StringIO()
+    with contextlib.redirect_stdout(captured_stdout):
+        data = run_request(load_request(Path(ns.request)))
+    stray = captured_stdout.getvalue()
+    if stray:
+        print(stray, file=sys.stderr, end="")
+        if isinstance(data, dict):
+            data.setdefault("warnings", []).append("suppressed non-JSON stdout from browser runtime; see stderr")
+            data.setdefault("metadata", {}).setdefault("suppressed_stdout_bytes", len(stray.encode("utf-8", errors="replace")))
     print(json.dumps(data, ensure_ascii=False))
     return 0 if data.get("success") else 1

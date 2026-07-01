@@ -170,7 +170,7 @@ def remember_pending_page_markdown(
     page_kind: str = "generic_page",
 ) -> dict[str, Any]:
     state = load_workflow_state(root, paths)
-    next_call = {"action": "page_markdown"}
+    next_call = {"action": "page_markdown", "profile": paths["site"].name}
     state.update(
         {
             "workflow_state": "needs_page_markdown",
@@ -248,6 +248,16 @@ def workflow_gate_guard_response(
     ])
     return output, meta
 
+
+def clear_workflow_state(root: Path, paths: dict[str, Path]) -> None:
+    path = workflow_state_file(root, paths["site"].name)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception:
+        save_workflow_state(root, paths, {"workflow_state": "cleared"})
+
 def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str | None = None) -> dict[str, Any]:
     return {
         "primary_loop": [
@@ -273,7 +283,7 @@ def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str 
 
 def remember_pending_markdown_read(root: Path, paths: dict[str, Path], *, markdown_file: Path, elements_file: Path | None = None, artifact_id: str | None = None, current_url: Any = None, title: Any = None, max_chars: int = 3000) -> dict[str, Any]:
     state = load_workflow_state(root, paths)
-    read_call = {"action": "read_page_md", "max_chars": max_chars}
+    read_call = {"action": "read_page_md", "profile": paths["site"].name, "max_chars": max_chars}
     state.update({
         "workflow_state": "needs_markdown_read",
         "pending_next_action": "read_page_md",

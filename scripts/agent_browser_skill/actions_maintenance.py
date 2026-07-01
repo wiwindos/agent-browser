@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_browser_skill.browser import dashboard, desktop
-from agent_browser_skill.core.args import timeout_from
+from agent_browser_skill.core.args import bool_arg, timeout_from
 from agent_browser_skill.core.artifacts import cleanup_note, path_size
 from agent_browser_skill.core.helpers import safe_slug
 from agent_browser_skill.core.locks import (
@@ -15,6 +15,7 @@ from agent_browser_skill.core.locks import (
     read_manual_browser_lock,
 )
 from agent_browser_skill.core.output import metadata
+from agent_browser_skill.core.workflow import clear_workflow_state
 from agent_browser_skill.core.paths import remembered_url
 from agent_browser_skill.core.profiles import (
     load_profile_aliases,
@@ -36,6 +37,7 @@ def action_close(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tu
     process_runtime.wait_profile_unlocked(paths["profile"], timeout=3.0)
     removed = process_runtime.unlock_profile(paths["profile"])
     suffix = f"; removed stale profile locks: {len(removed)}" if removed else ""
+    clear_workflow_state(root, paths)
     return f"agent-browser daemon closed; manual_desktop: {desktop_note}{suffix}", metadata(paths)
 
 
@@ -56,6 +58,7 @@ def action_recover(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> 
             notes.append(f"agent-browser install warning: {out}")
     if not notes:
         notes.append("closed daemon; profile had no visible lock files")
+    clear_workflow_state(root, paths)
     return "\n".join(notes), metadata(paths)
 
 
@@ -143,4 +146,9 @@ def action_set_profile_alias(root: Path, paths: dict[str, Path], args: dict[str,
 
 
 def action_cleanup(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    return cleanup_note(root), metadata(paths)
+    aggressive = bool_arg(args, "aggressive", False)
+    include_runtime_env = bool_arg(args, "include_runtime_env", False)
+    meta = metadata(paths)
+    meta["cleanup_aggressive"] = aggressive
+    meta["cleanup_include_runtime_env"] = include_runtime_env or aggressive
+    return cleanup_note(root, aggressive=aggressive, include_runtime_env=include_runtime_env), meta

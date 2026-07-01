@@ -8,6 +8,7 @@ WORKSPACE_TARGET_BYTES = 420 * 1024 * 1024
 
 DEFAULT_PROFILE_ALIASES: dict[str, list[str]] = {
     "saby": ["saby.ru", "*.saby.ru"],
+    "4pda": ["4pda.to", "*.4pda.to", "4pda.ru", "*.4pda.ru"],
 }
 
 FOLLOW_ACTIVE_PROFILE_ACTIONS = {
@@ -25,7 +26,15 @@ FOLLOW_ACTIVE_PROFILE_ACTIONS = {
     "desktop_open",
     "desktop_snapshot",
     "desktop_screenshot",
+    "page_markdown",
+    "page_markdown.get",
     "page_markdown.act",
+    "read_page_md",
+    "read_artifact",
+    "read_artifact_by_id",
+    "search_artifact",
+    "read_artifact_slice",
+    "summarize_artifact",
     "challenge_detected",
     "continue_after_manual",
     "status",
@@ -105,4 +114,4 @@ MANUAL_BROWSER_PROFILE_ACTIONS = {
     "evaluate",
     "saby_tenders_csv",
 }
-LOCKLESS_ACTIONS = {"status", "profile_aliases", "cleanup"}
+LOCKLESS_ACTIONS = {"status", "profile_aliases", "cleanup", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "list_artifacts", "read_page_md", "summarize_artifact"}
