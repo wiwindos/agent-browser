@@ -6,6 +6,8 @@ All browser work must go through `skill_agent-browser_browser`. Do not use raw s
 
 If the user explicitly names `agent-browser` and asks for a concrete browser action, load `skill_agent-browser_browser` immediately and call the relevant `action`. Do not browse `/data/skills/...` or read local reference files first unless the tool response is ambiguous.
 
+- If workspace is above limit, do not use `run_command`, `rm`, `du`, or `find`; use `skill_agent-browser_browser(action=cleanup, aggressive=true)` first.
+
 ## Choose Workflow
 
 Primary browser workflow is universal and Markdown-node-first. Do not start by choosing a site-specific/date/forum/search extractor.

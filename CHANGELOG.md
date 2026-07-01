@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.78
+
+- Hardened the browser runner so stdout and stderr from runtime internals are suppressed into tool logs and the CLI emits exactly one JSON response with exit code 0 when transport JSON is formed.
+- Protected active and recent Markdown/artifact directories during cleanup and made `page_markdown` run safe cleanup before writing new artifacts when the workspace is over limit.
+- Expanded active-profile following for browser content actions and strengthened workspace-overflow recovery guidance toward `cleanup` instead of shell commands.
+- Allowed `read_artifact` to accept `artifact_id` as an alias and clarified Markdown node IDs as revision-scoped.
+
 ## 0.3.77
 
 - Kept Markdown and protected artifact read actions on the active browser profile when callers omit `profile`, preventing fallback to the default workflow state after profile-specific desktop sessions.
