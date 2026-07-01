@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-GENERIC_BROWSER_CONTENT_ACTIONS = {"run_command", "read_file", "list_directory", "fetch_page", "write_file"}
+GENERIC_BROWSER_CONTENT_ACTIONS = {"run_command", "read_file", "list_directory", "search_files", "fetch_page", "write_file"}
 BROWSER_FORBIDDEN_FALLBACK_PATTERNS = [
     "curl ",
     "wget ",
@@ -111,7 +111,7 @@ def next_action_for_blocked(action: str, args: dict[str, Any], state: dict[str, 
                 return candidate
     if "page_markdown" in allowed or state.get("phase") in {"READY", "LOADED", "EXTRACTED"}:
         return "page_markdown"
-    if "browser-artifacts" in text or action in {"read_file", "list_directory"}:
+    if "browser-artifacts" in text or action in {"read_file", "list_directory", "search_files"}:
         return "read_artifact_by_id" if "read_artifact_by_id" in allowed else "search_artifact"
     if "4pda" in text or "forum" in text:
         return "page_markdown"

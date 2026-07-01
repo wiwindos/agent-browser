@@ -19,7 +19,7 @@ def _run(tmp_path: Path, args: dict) -> dict:
 
 
 def test_active_browser_blocks_generic_tools_with_normalized_result(tmp_path: Path) -> None:
-    for action in ["run_command", "read_file", "list_directory"]:
+    for action in ["run_command", "read_file", "list_directory", "search_files"]:
         out = _run(tmp_path, {"action": action, "command": "echo should-not-run", "path": "/tmp"})
         assert out["success"] is False
         assert out["ok"] is False

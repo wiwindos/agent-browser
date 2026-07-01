@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.80
+
+- Routed `read_artifact` calls that provide `artifact_id` or pass `art_`/`md_`/`map_`/`snap_` IDs as `path` through artifact-ID resolution instead of treating IDs as filesystem paths.
+- Blocked `search_files` as a generic browser-content fallback during active browser workflows.
+- Added stronger artifact-access guidance after Markdown and artifact listing/reading outputs to prefer `read_artifact_by_id`/`search_artifact` over generic file, shell, or repeated full-artifact reads.
+
 ## 0.3.79
 
 - Added top-level `output` to unified success and error payloads so the browser tool contract exposes non-empty content to callers that read `output` instead of `message`.
