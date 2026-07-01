@@ -24,6 +24,7 @@ from agent_browser_skill.core.workflow import (
     remember_pending_text_read,
     remember_pending_markdown_read,
     remember_pending_page_markdown,
+    clear_workflow_state,
     mark_pending_gate_completed,
     markdown_first_policy,
     text_workflow_guard_response,
@@ -934,6 +935,7 @@ def action_manual_desktop(root: Path, paths: dict[str, Path], args: dict[str, An
 
 def action_stop_desktop(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     output = process_runtime.stop_manual_desktop(root)
+    clear_workflow_state(root, paths)
     return output, metadata(paths)
 
 
@@ -1598,13 +1600,19 @@ def action_page_markdown(root: Path, paths: dict[str, Path], args: dict[str, Any
     md_file = write_text_artifact(root, paths, "page-md", snapshot["markdown"])
     elements_file = write_json_artifact(root, paths, "page-md-elements", {"url": snapshot["url"], "title": snapshot["title"], "elements": snapshot["elements"], "metadata": snapshot["metadata"]})
     full_file = write_json_artifact(root, paths, "page-markdown", snapshot)
+    missing = [str(path) for path in (md_file, elements_file, full_file) if not path.exists() or not path.is_file()]
+    if missing:
+        raise ToolError("page_markdown failed to persist required artifact file(s): " + ", ".join(missing))
+    sizes = {"markdown_bytes": md_file.stat().st_size, "elements_bytes": elements_file.stat().st_size, "full_bytes": full_file.stat().st_size}
+    if any(size <= 0 for size in sizes.values()):
+        raise ToolError("page_markdown persisted an empty required artifact file; retry after cleanup")
     from agent_browser_skill.core.action_schemas import opaque_id
     artifact_id = opaque_id(md_file, "md")
     elements_id = opaque_id(elements_file, "map")
     mark_pending_gate_completed(root, paths, "page_markdown")
     remember_pending_markdown_read(root, paths, markdown_file=md_file, elements_file=elements_file, artifact_id=artifact_id, current_url=snapshot["url"], title=snapshot["title"], max_chars=max_chars)
     meta = metadata(paths)
-    meta.update({"manual_desktop_active": True, "current_url": snapshot["url"], "title": snapshot["title"], "markdown_file": str(md_file), "text_file": str(md_file), "artifact_id": artifact_id, "elements_file": str(elements_file), "elements_artifact_id": elements_id, "page_markdown_file": str(full_file), "revision": snapshot["revision"], "stable": snapshot["stable"], "content_md_length": len(snapshot["content_md"]), "ui_elements_count": len(snapshot["actionable_nodes"]), "warnings": snapshot.get("warnings") or []})
+    meta.update({"manual_desktop_active": True, "current_url": snapshot["url"], "title": snapshot["title"], "markdown_file": str(md_file), "text_file": str(md_file), "artifact_id": artifact_id, "elements_file": str(elements_file), "elements_artifact_id": elements_id, "page_markdown_file": str(full_file), "revision": snapshot["revision"], "stable": snapshot["stable"], "content_md_length": len(snapshot["content_md"]), "ui_elements_count": len(snapshot["actionable_nodes"]), "warnings": snapshot.get("warnings") or [], **sizes})
     meta.update(_markdown_workflow_meta(md_file, artifact_id))
     excerpt = snapshot["markdown"][:max_chars] + ("\n...[truncated; read markdown_file artifact for full content]" if len(snapshot["markdown"]) > max_chars else "")
     return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and UI node_id values, then use page_markdown.act for page-changing actions; it returns the refreshed Markdown", "next_tool_call: " + json.dumps({"action":"read_page_md","max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta

@@ -15,6 +15,7 @@ from agent_browser_skill.core.locks import (
     read_manual_browser_lock,
 )
 from agent_browser_skill.core.output import metadata
+from agent_browser_skill.core.workflow import clear_workflow_state
 from agent_browser_skill.core.paths import remembered_url
 from agent_browser_skill.core.profiles import (
     load_profile_aliases,
@@ -36,6 +37,7 @@ def action_close(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tu
     process_runtime.wait_profile_unlocked(paths["profile"], timeout=3.0)
     removed = process_runtime.unlock_profile(paths["profile"])
     suffix = f"; removed stale profile locks: {len(removed)}" if removed else ""
+    clear_workflow_state(root, paths)
     return f"agent-browser daemon closed; manual_desktop: {desktop_note}{suffix}", metadata(paths)
 
 
@@ -56,6 +58,7 @@ def action_recover(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> 
             notes.append(f"agent-browser install warning: {out}")
     if not notes:
         notes.append("closed daemon; profile had no visible lock files")
+    clear_workflow_state(root, paths)
     return "\n".join(notes), metadata(paths)
 
 

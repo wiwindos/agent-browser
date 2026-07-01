@@ -248,6 +248,16 @@ def workflow_gate_guard_response(
     ])
     return output, meta
 
+
+def clear_workflow_state(root: Path, paths: dict[str, Path]) -> None:
+    path = workflow_state_file(root, paths["site"].name)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception:
+        save_workflow_state(root, paths, {"workflow_state": "cleared"})
+
 def markdown_first_policy(*, artifact_id: str | None = None, markdown_file: str | None = None) -> dict[str, Any]:
     return {
         "primary_loop": [
