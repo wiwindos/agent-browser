@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.79
+
+- Added top-level `output` to unified success and error payloads so the browser tool contract exposes non-empty content to callers that read `output` instead of `message`.
+- Cleared stale pending Markdown workflow gates when the remembered Markdown artifact is missing and classified stale Markdown reads with `STALE_MARKDOWN_ARTIFACT`.
+- Made `read_page_md` return a compact, useful Markdown excerpt with artifact metadata, forum-date search guidance, and pagination follow-up hints.
+- Strengthened browser-workflow fallback policy and prompts to block `fetch_page`, shell/network, parser-script, and dependency-install fallbacks for page content.
+
 ## 0.3.78
 
 - Hardened the browser runner so stdout and stderr from runtime internals are suppressed into tool logs and the CLI emits exactly one JSON response with exit code 0 when transport JSON is formed.

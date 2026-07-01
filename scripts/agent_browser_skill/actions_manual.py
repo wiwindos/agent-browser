@@ -1640,34 +1640,68 @@ def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]
     path = str(workflow.get("last_markdown_file") or "").strip()
     if not path:
         raise ToolError("no pending Markdown artifact found; call page_markdown first")
+    markdown_path = ensure_inside(Path(path), root)
+    if not markdown_path.exists() or not markdown_path.is_file():
+        clear_workflow_state(root, paths)
+        profile = paths["site"].name
+        raise ToolError(
+            "STALE_MARKDOWN_ARTIFACT: last Markdown artifact is missing; "
+            f'next_tool_call={{"action":"page_markdown","profile":"{profile}"}}'
+        )
+
+    max_chars = int_arg(args, "max_chars", 5000, 500, 12000)
     read_args = {
         "action": "read_artifact",
-        "path": path,
+        "path": str(markdown_path),
         "mode": args.get("mode") or "head",
-        "max_chars": args.get("max_chars") or 3000,
+        "max_chars": max_chars,
     }
     for key in ("query", "regex", "context_lines"):
         if args.get(key) is not None:
             read_args[key] = args.get(key)
-    output, meta = action_read_artifact(root, paths, read_args)
+    artifact_output, meta = action_read_artifact(root, paths, read_args)
     artifact_id = str(workflow.get("last_markdown_artifact_id") or "")
+    full_text = markdown_path.read_text(encoding="utf-8", errors="replace")
+    excerpt = _artifact_excerpt(markdown_path, max_chars, str(read_args.get("mode") or "head"))
+    search_call = {"action": "search_artifact", "profile": paths["site"].name, "artifact_id": artifact_id or meta.get("artifact_id") or "<artifact_id>", "query": "Вчера"}
+    act_call = {
+        "action": "page_markdown.act",
+        "node_id": "<choose_from_markdown>",
+        "node_action": "click|fill|type|select|submit",
+        "revision": "<current_revision>",
+    }
     meta.update({
-        "markdown_file": path,
-        "text_file": path,
+        "markdown_file": str(markdown_path),
+        "text_file": str(markdown_path),
         "artifact_id": artifact_id or meta.get("artifact_id"),
+        "content_md_length": len(full_text),
         "read_page_md_used": True,
         "recommended_next_action": "page_markdown.act",
         "allowed_next_actions": ["page_markdown.act", "page_markdown", "search_artifact", "read_artifact_slice", "scroll_until_stable", "navigate_pagination", "click_handle", "fill_handle", "select_handle", "extract_forum_posts", "summarize_artifact"],
-        "next_tool_call": {
-            "action": "page_markdown.act",
-            "node_id": "<choose_from_markdown>",
-            "node_action": "click|fill|type|select|submit",
-            "revision": "<current_revision>",
-        },
-        "markdown_first_policy": markdown_first_policy(artifact_id=artifact_id or None, markdown_file=path),
+        "next_tool_call": act_call,
+        "forum_date_search_next_tool_call": search_call,
+        "if_date_search_not_found_next_tool_call": {"action": "navigate_pagination", "profile": paths["site"].name, "target": "previous"},
+        "artifact_read_output_chars": len(artifact_output),
+        "markdown_first_policy": markdown_first_policy(artifact_id=artifact_id or None, markdown_file=str(markdown_path)),
     })
     mark_pending_gate_completed(root, paths, "read_page_md")
-    return "read_page_md_ok=true\n" + output + "\nnext_step: choose a UI node_id/action from the Markdown and call page_markdown.act so the next response includes refreshed Markdown", meta
+    lines = [
+        "read_page_md_ok=true",
+        f"title: {workflow.get('last_title') or meta.get('title') or ''}",
+        f"current_url: {workflow.get('last_url') or meta.get('current_url') or ''}",
+        f"artifact_id: {artifact_id or meta.get('artifact_id') or ''}",
+        f"markdown_file: {markdown_path}",
+        f"content_md_length: {len(full_text)}",
+        f"excerpt_chars: {len(excerpt)}",
+        "",
+        cap_output(excerpt, max_chars + 500),
+        "",
+        "next_step: choose a UI node_id/action from the Markdown and call page_markdown.act; for forum date requests, search the artifact first and paginate if needed",
+        "next_tool_call: " + json.dumps(act_call, ensure_ascii=False),
+        "forum_date_search_next_tool_call: " + json.dumps(search_call, ensure_ascii=False),
+        "if_not_found_next_tool_call: " + json.dumps({"action": "navigate_pagination", "profile": paths["site"].name, "target": "previous"}, ensure_ascii=False),
+    ]
+    return "\n".join(lines), meta
 
 
 def _load_last_handle(root: Path, paths: dict[str, Path], handle: str) -> dict[str, Any]:

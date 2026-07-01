@@ -10,7 +10,7 @@ if str(SCRIPTS) not in sys.path:
 
 from agent_browser_skill.core.action_schemas import save_state
 from agent_browser_skill.core.paths import paths_for
-from agent_browser_skill.core.workflow import remember_pending_page_markdown
+from agent_browser_skill.core.workflow import load_workflow_state, remember_pending_markdown_read, remember_pending_page_markdown
 from agent_browser_skill.runner import run_request
 
 
@@ -24,6 +24,7 @@ def test_active_browser_blocks_generic_tools_with_normalized_result(tmp_path: Pa
         assert out["success"] is False
         assert out["ok"] is False
         assert out["error_code"] == "BLOCKED"
+        assert out["output"] == out["message"]
         assert out["action"] == action
         assert out["session_id"] == "browser-session"
         assert out["state"]["session_id"] == "browser-session"
@@ -126,7 +127,8 @@ def test_browser_sequence_returns_structured_guidance_not_shell(tmp_path: Path, 
     for out in results:
         assert out["ok"] is True
         assert out["message"].strip()
-        assert {"ok", "action", "session_id", "state", "error_code", "message", "suggested_next_action", "next_allowed_actions"} <= set(out)
+        assert out["output"] == out["message"]
+        assert {"ok", "action", "session_id", "state", "error_code", "message", "output", "suggested_next_action", "next_allowed_actions"} <= set(out)
         assert out["suggested_next_action"] not in {"run", "run_command", "read_file", "shell"}
 
     assert results[0]["state"]["phase"] == "READY"
@@ -205,6 +207,51 @@ def test_observed_4pda_browser_workflow_gate_sequence(tmp_path: Path, monkeypatc
     assert "read_page_md_ok=true" in read["message"]
     assert calls.count("page_markdown") == 1
 
+
+
+def test_stale_markdown_gate_clears_and_allows_desktop_open(tmp_path: Path, monkeypatch) -> None:
+    paths = paths_for(tmp_path, {"action": "page_markdown", "profile": "4pda.to"})
+    missing_md = tmp_path / "browser-artifacts" / "4pda.to" / "run" / "missing-page-md.txt"
+    remember_pending_markdown_read(
+        tmp_path,
+        paths,
+        markdown_file=missing_md,
+        artifact_id="md_missing",
+        current_url="https://4pda.to/forum/index.php?showtopic=1",
+        title="4PDA",
+    )
+
+    calls: list[str] = []
+
+    def fake_desktop_open(root, paths, args):
+        calls.append("desktop_open")
+        return "desktop_opened=true", {"current_url": args.get("url"), "site_key": "4pda.to", "recommended_next_action": "page_markdown", "next_tool_call": {"action": "page_markdown", "profile": "4pda.to"}}
+
+    monkeypatch.setattr("agent_browser_skill.runner.ACTIONS", {"desktop_open": fake_desktop_open})
+    monkeypatch.setattr("agent_browser_skill.runner.manual_desktop_running", lambda root: True)
+    monkeypatch.setattr("agent_browser_skill.core.locks.guard_manual_browser_resource", lambda *a, **k: None)
+
+    out = _run(tmp_path, {"action": "desktop_open", "profile": "4pda.to", "url": "https://4pda.to/forum/index.php?showtopic=1"})
+
+    assert out["ok"] is True
+    assert out["output"] == out["message"]
+    assert calls == ["desktop_open"]
+    assert load_workflow_state(tmp_path, paths).get("pending_next_action") != "read_page_md"
+    assert out["suggested_next_action"] == "page_markdown"
+
+
+def test_read_page_md_reports_stale_markdown_artifact_and_clears_state(tmp_path: Path) -> None:
+    paths = paths_for(tmp_path, {"action": "read_page_md", "profile": "4pda.to"})
+    missing_md = tmp_path / "browser-artifacts" / "4pda.to" / "run" / "missing-page-md.txt"
+    remember_pending_markdown_read(tmp_path, paths, markdown_file=missing_md, artifact_id="md_missing")
+
+    out = _run(tmp_path, {"action": "read_page_md", "profile": "4pda.to"})
+
+    assert out["ok"] is False
+    assert out["error_code"] == "STALE_MARKDOWN_ARTIFACT"
+    assert out["output"] == out["message"]
+    assert "next_tool_call" in out["message"]
+    assert load_workflow_state(tmp_path, paths) == {}
 
 def test_desktop_open_without_url_preserves_4pda_profile_in_error(tmp_path: Path) -> None:
     out = _run(tmp_path, {"action": "desktop_open", "profile": "4pda.to"})

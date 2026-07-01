@@ -20,6 +20,6 @@ Hard rules:
 - Do not use shell commands for browser work.
 - Do not use `read_file` on `browser-artifacts/`; use `read_artifact`/`read_page_md`.
 - If tool output already contains `next_step:` or `next_tool_call`, follow it directly.
-- Do not use screenshots, `read_file`, `run_command`, raw `fetch_page`, large raw `evaluate`, or `action=run` as substitutes for extracting page text or deciding node actions.
+- Do not use screenshots, `read_file`, `run_command`, raw `fetch_page`, `curl`, `wget`, Python `requests`, BeautifulSoup/`bs4`, `lxml`, `pip install`, large raw `evaluate`, or `action=run` as substitutes for extracting page text or deciding node actions. When agent-browser is requested, stay inside `skill_agent-browser_browser` actions.
 
 - If workspace is above limit, do not use `run_command`, `rm`, `du`, or `find`; use `skill_agent-browser_browser(action=cleanup, aggressive=true)` first.

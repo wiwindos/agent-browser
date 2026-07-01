@@ -57,6 +57,7 @@ This loop is the main workflow for catalogs, forums, search results, tables, per
 - Prefer exact file paths with `read_artifact`, especially returned `snapshot_file`, `state_file`, `text_file`, or another `*_file`. If only an artifact run directory is available, pass it to `read_artifact`; the tool will auto-select the best readable text/json artifact.
 - Do not use `screenshot` as the first recovery step for an empty snapshot, and do not substitute a screenshot for requested textual extraction unless the user explicitly asked for an image or visual proof.
 - Do not use raw `fetch_page`, `action=run`, or large raw `evaluate` dumps for page text or HTML. Use `page_markdown`/`read_page_md` and act with `page_markdown.act`; typed extractors and `navigate_pagination` are optional fast paths only after Markdown inspection.
+- When the user explicitly asks to use agent-browser, do not use `fetch_page`, `curl`, `wget`, Python `requests`, BeautifulSoup/`bs4`, `lxml` parser scripts, `pip install`, `run_command`, or other shell/network fallbacks for page content. Use only `skill_agent-browser_browser` actions (`desktop_open` → `page_markdown` → `read_page_md` → `page_markdown.act`/`search_artifact`/typed extractors).
 - Raw `evaluate` is forbidden for ordinary browsing tasks and the normal/happy path. Use the Markdown-node workflow instead. `evaluate` is only allowed when explicitly passed `allow_unsafe_eval=true`; otherwise it returns `RAW_EVAL_DISABLED`/`VALIDATION_ERROR` with a `suggested_next_action`.
 
 ## References

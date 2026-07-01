@@ -22,7 +22,7 @@ from agent_browser_skill.core import locks as core_locks
 from agent_browser_skill.core.output import cap_output, load_request, pid_running, redact, workspace_root
 from agent_browser_skill.core.paths import paths_for, remembered_url
 from agent_browser_skill.core.profiles import site_key_from
-from agent_browser_skill.core.workflow import pending_workflow_gate, workflow_gate_guard_response
+from agent_browser_skill.core.workflow import clear_workflow_state, pending_markdown_file_missing, pending_workflow_gate, workflow_gate_guard_response
 from agent_browser_skill.core.structured_logs import append_tool_log, make_run_id
 from agent_browser_skill.errors import BrowserBusyError, ToolError
 from agent_browser_skill.result import ToolResult
@@ -60,6 +60,8 @@ def _classify_error(message: str) -> str:
         return "BLOCKED"
     if "navigate" in low or "url" in low or "cdp" in low or "devtools" in low:
         return "NAVIGATION_ERROR"
+    if "stale_markdown_artifact" in low:
+        return "STALE_MARKDOWN_ARTIFACT"
     if "artifact" in low or "extract" in low or "snapshot" in low:
         return "EXTRACTION_ERROR"
     return "INTERNAL_ERROR"
@@ -125,6 +127,7 @@ def _unified_payload(payload: dict, action: str, state: dict, root: Path) -> dic
         "state": state,
         "error_code": None,
         "message": output,
+        "output": output,
         "suggested_next_action": _metadata_suggested_next_action(meta, state) or _suggested_next_action(action, state),
         "next_allowed_actions": state.get("next_allowed_actions") or [],
         "warnings": warnings,
@@ -149,7 +152,7 @@ def _error_payload(
     suggested = suggested_next_action or _suggested_next_action(action, state)
     return {
         "success": False, "ok": False, "action": action, "session_id": state.get("session_id", "default"),
-        "state": state, "error_code": code, "message": message, "suggested_next_action": suggested,
+        "state": state, "error_code": code, "message": message, "output": message, "suggested_next_action": suggested,
         "next_allowed_actions": state.get("next_allowed_actions") or [], "warnings": list(warnings or []), "error": message,
     }
 
@@ -277,10 +280,12 @@ def run_request(request: dict) -> dict:
         if action in LOCKLESS_ACTIONS:
             cleanup_notes = []
             paths = paths_for(root, args)
-            pending_gate = pending_workflow_gate(root, paths)
+            if requested_action != "read_page_md" and pending_markdown_file_missing(root, paths):
+                clear_workflow_state(root, paths)
+            pending_gate = None if requested_action == "read_page_md" else pending_workflow_gate(root, paths)
             pending_action = str((pending_gate or {}).get("pending_next_action") or "")
             pending_allowlist = {"page_markdown", "read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "list_artifacts", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
-            gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
+            gated = None if requested_action == "read_page_md" else workflow_gate_guard_response(root, paths, attempted_action=requested_action)
             if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist and not (requested_action == "desktop_open" and not manual_desktop_running(root)):
                 output, meta = gated
                 base_meta = metadata(paths)
@@ -301,10 +306,12 @@ def run_request(request: dict) -> dict:
             ):
                 cleanup_notes = auto_cleanup_if_needed(root)
                 paths = paths_for(root, args)
-                pending_gate = pending_workflow_gate(root, paths)
+                if requested_action != "read_page_md" and pending_markdown_file_missing(root, paths):
+                    clear_workflow_state(root, paths)
+                pending_gate = None if requested_action == "read_page_md" else pending_workflow_gate(root, paths)
                 pending_action = str((pending_gate or {}).get("pending_next_action") or "")
                 pending_allowlist = {"page_markdown", "read_page_md", "read_artifact", "read_artifact_by_id", "search_artifact", "read_artifact_slice", "list_artifacts", "status", "cleanup", "close", "recover", "challenge_detected", "continue_after_manual"}
-                gated = workflow_gate_guard_response(root, paths, attempted_action=requested_action)
+                gated = None if requested_action == "read_page_md" else workflow_gate_guard_response(root, paths, attempted_action=requested_action)
                 if gated and pending_action in {"page_markdown", "read_page_md"} and requested_action not in pending_allowlist and not (requested_action == "desktop_open" and not manual_desktop_running(root)):
                     output, meta = gated
                     base_meta = metadata(paths)
