@@ -154,6 +154,15 @@ def _error_payload(
     }
 
 
+
+def _workspace_limit_payload(message: str, action: str, state: dict, warnings: list[str] | None = None) -> dict:
+    payload = _error_payload("WORKSPACE_LIMIT_EXCEEDED", message, action, state, warnings, suggested_next_action="cleanup")
+    payload["next_tool_call"] = {"action": "cleanup", "aggressive": True, "include_runtime_env": True}
+    payload["forbidden_next_actions"] = ["run_command", "rm", "du", "find"]
+    payload.setdefault("metadata", {})["next_tool_call"] = payload["next_tool_call"]
+    payload["metadata"]["forbidden_next_actions"] = payload["forbidden_next_actions"]
+    return payload
+
 def _ensure_visible_markdown_guidance(output: str, action: str) -> str:
     if action not in {"desktop_open", "desktop_snapshot"}:
         return output
@@ -379,13 +388,11 @@ def run_request(request: dict) -> dict:
         if cleanup_notes and action != "cleanup":
             meta["auto_cleanup"] = {"removed_entries": len(cleanup_notes)}
             if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
-                output = "\n".join(
-                    [
-                        "auto_cleanup ran, but workspace is still above the soft limit.",
-                        "Run action=cleanup or remove large non-profile files before heavy browser work.",
-                        "",
-                        output,
-                    ]
+                return _workspace_limit_payload(
+                    "workspace is above the soft limit after auto-cleanup; use action=cleanup with aggressive=true and include_runtime_env=true before more browser work",
+                    requested_action,
+                    state,
+                    current_warnings,
                 )
         if validation_warnings:
             meta.setdefault("warnings", []).extend(validation_warnings)
@@ -468,7 +475,10 @@ def run_request(request: dict) -> dict:
             )
         return payload
     except ToolError as exc:
-        payload = _error_payload(_classify_error(str(exc)), str(exc), action, _state_for_error(root, request), current_warnings)
+        if "WORKSPACE_LIMIT_EXCEEDED" in str(exc):
+            payload = _workspace_limit_payload(str(exc), action, _state_for_error(root, request), current_warnings)
+        else:
+            payload = _error_payload(_classify_error(str(exc)), str(exc), action, _state_for_error(root, request), current_warnings)
         if root is not None:
             append_tool_log(
                 root,
@@ -504,13 +514,21 @@ def main() -> int:
     parser.add_argument("--request", required=True)
     ns = parser.parse_args()
     captured_stdout = io.StringIO()
-    with contextlib.redirect_stdout(captured_stdout):
-        data = run_request(load_request(Path(ns.request)))
-    stray = captured_stdout.getvalue()
-    if stray:
-        print(stray, file=sys.stderr, end="")
-        if isinstance(data, dict):
-            data.setdefault("warnings", []).append("suppressed non-JSON stdout from browser runtime; see stderr")
-            data.setdefault("metadata", {}).setdefault("suppressed_stdout_bytes", len(stray.encode("utf-8", errors="replace")))
+    captured_stderr = io.StringIO()
+    request = load_request(Path(ns.request))
+    with contextlib.redirect_stdout(captured_stdout), contextlib.redirect_stderr(captured_stderr):
+        data = run_request(request)
+    stray_stdout = captured_stdout.getvalue()
+    stray_stderr = captured_stderr.getvalue()
+    if isinstance(data, dict):
+        suppressed = len(stray_stdout.encode("utf-8", errors="replace")) + len(stray_stderr.encode("utf-8", errors="replace"))
+        if suppressed:
+            data.setdefault("warnings", []).append("suppressed non-JSON runtime output")
+            data.setdefault("metadata", {})["suppressed_runtime_output_bytes"] = suppressed
+            try:
+                root = workspace_root(request)
+                append_tool_log(root, {"event": "suppressed_runtime_output", "stdout": stray_stdout, "stderr": stray_stderr, "bytes": suppressed})
+            except Exception:
+                pass
     print(json.dumps(data, ensure_ascii=False))
-    return 0 if data.get("success") else 1
+    return 0

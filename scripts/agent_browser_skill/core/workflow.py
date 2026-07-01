@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -191,6 +192,14 @@ def pending_workflow_gate(root: Path, paths: dict[str, Path]) -> dict[str, Any] 
     pending = state.get("pending_next_tool_call")
     action = str(state.get("pending_next_action") or "").strip()
     if action and isinstance(pending, dict):
+        if action == "read_page_md" and state.get("workflow_state") == "markdown_read":
+            pending_artifact = str(pending.get("artifact_id") or state.get("last_markdown_artifact_id") or "")
+            read_artifact = str(state.get("last_read_artifact_id") or "")
+            if not pending_artifact or pending_artifact == read_artifact:
+                state.pop("pending_next_action", None)
+                state.pop("pending_next_tool_call", None)
+                save_workflow_state(root, paths, state)
+                return None
         return state
     return None
 
@@ -205,6 +214,8 @@ def mark_pending_gate_completed(root: Path, paths: dict[str, Path], action: str)
         elif action == "read_page_md":
             state["workflow_state"] = "markdown_read"
             state["text_artifact_read"] = True
+            state["last_read_at"] = time.time()
+            state["last_read_artifact_id"] = state.get("last_markdown_artifact_id") or state.get("last_read_artifact_id") or ""
         save_workflow_state(root, paths, state)
 
 

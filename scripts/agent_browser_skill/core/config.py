@@ -38,6 +38,21 @@ FOLLOW_ACTIVE_PROFILE_ACTIONS = {
     "challenge_detected",
     "continue_after_manual",
     "status",
+    "scroll_until_stable",
+    "navigate_pagination",
+    "extract_forum_posts",
+    "extract_links",
+    "extract_blocks",
+    "extract_article",
+    "extract_table",
+    "extract_search_results",
+    "extract_updates_by_date",
+    "filter_by_date",
+    "summarize_posts",
+    "find_text",
+    "click_text",
+    "click_selector",
+    "list_artifacts",
 }
 
 ARTIFACT_ACTIONS = {
