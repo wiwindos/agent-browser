@@ -1,7 +1,7 @@
 {
   "name": "agent-browser",
   "description": "Safe browser runtime manager for the current LocalTopSH per-user sandbox. Uses a universal Markdown-node agentic workflow for webpages, screenshots, persistent login profiles, classic noVNC/manual desktop, downloads, protected artifact reading, generic pagination/show-more navigation, and Saby/SBIS tender CSV export through actions like open, desktop_open, page_markdown, read_page_md, page_markdown.act, downloads, and saby_tenders_csv. Specialized extractors remain optional fast paths, not the primary workflow.",
-  "version": "0.3.78",
+  "version": "0.3.79",
   "author": "LocalTopSH",
   "system_prompt_file": "SKILL.md",
   "autoload_prompt_file": "AUTOLOAD.md",

@@ -4,6 +4,16 @@ import re
 from typing import Any
 
 GENERIC_BROWSER_CONTENT_ACTIONS = {"run_command", "read_file", "list_directory", "fetch_page", "write_file"}
+BROWSER_FORBIDDEN_FALLBACK_PATTERNS = [
+    "curl ",
+    "wget ",
+    "requests",
+    "beautifulsoup",
+    "bs4",
+    "lxml",
+    "fetch_page",
+    "pip install",
+]
 PROTECTED_PATH_PATTERNS = (
     re.compile(r"/workspace(?:/[^\s'\"]*)?"),
     re.compile(r"/data/skills/agent-browser(?:/[^\s'\"]*)?"),
@@ -12,8 +22,10 @@ PROTECTED_PATH_PATTERNS = (
 COMMAND_LIKE_PATTERNS = (
     re.compile(r"\bfind\s+/workspace\b", re.I),
     re.compile(r"\bcurl\b[^\n]*(?:https?://|4pda|/workspace|browser-artifacts)", re.I),
+    re.compile(r"\bwget\b[^\n]*(?:https?://|4pda|/workspace|browser-artifacts)", re.I),
     re.compile(r"\bpip(?:3)?\s+install\b", re.I),
     re.compile(r"\bpython3?\s+<<\s*['\"]?PYEOF['\"]?", re.I),
+    re.compile(r"\b(requests|beautifulsoup|bs4|lxml|fetch_page)\b", re.I),
 )
 BROWSER_CONTENT_ACTIONS = [
     "page_markdown",
@@ -80,11 +92,11 @@ def protected_browser_content_request(action: str, args: dict[str, Any]) -> tupl
     strings = _flatten_strings({k: v for k, v in args.items() if k != "_context"})
     haystack = "\n".join(strings)
     if action in GENERIC_BROWSER_CONTENT_ACTIONS:
-        return True, f"{action} is blocked for active browser sessions; use browser artifact/extraction actions instead"
+        return True, f"BLOCKED_BROWSER_WORKFLOW_FALLBACK: {action} is blocked for active browser sessions; use browser artifact/extraction actions instead"
     if any(pattern.search(haystack) for pattern in PROTECTED_PATH_PATTERNS):
         return True, "direct access to browser workspace, skill files, or browser-artifacts is blocked for active browser sessions"
     if any(pattern.search(haystack) for pattern in COMMAND_LIKE_PATTERNS):
-        return True, "command-like browser content access is blocked for active browser sessions"
+        return True, "BLOCKED_BROWSER_WORKFLOW_FALLBACK: command-like browser content access is blocked for active browser sessions"
     return False, None
 
 

@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from agent_browser_skill.core.paths import ensure_inside
+
 
 DEFAULT_BROWSER_CONSTRAINTS = {
     "do_not_use_shell": True,
@@ -187,7 +189,24 @@ def remember_pending_page_markdown(
     return state
 
 
+
+def pending_markdown_file_missing(root: Path, paths: dict[str, Path]) -> bool:
+    state = load_workflow_state(root, paths)
+    if str(state.get("pending_next_action") or "").strip() != "read_page_md":
+        return False
+    path = str(state.get("last_markdown_file") or "").strip()
+    if not path:
+        return False
+    try:
+        resolved = ensure_inside(Path(path), root)
+    except Exception:
+        return True
+    return not resolved.exists() or not resolved.is_file()
+
 def pending_workflow_gate(root: Path, paths: dict[str, Path]) -> dict[str, Any] | None:
+    if pending_markdown_file_missing(root, paths):
+        clear_workflow_state(root, paths)
+        return None
     state = load_workflow_state(root, paths)
     pending = state.get("pending_next_tool_call")
     action = str(state.get("pending_next_action") or "").strip()
