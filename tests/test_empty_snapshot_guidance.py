@@ -23,6 +23,7 @@ from agent_browser_skill.actions_manual import (
     action_smart_read,
 )
 from agent_browser_skill.core.config import LOCKLESS_ACTIONS
+from agent_browser_skill.core.action_schemas import opaque_id
 from agent_browser_skill.core.artifacts import cleanup_note
 from agent_browser_skill.core.paths import paths_for
 from agent_browser_skill.errors import ToolError
@@ -52,6 +53,31 @@ def test_empty_snapshot_returns_read_artifact_next_tool_call(monkeypatch: pytest
     assert f'"path": "{snapshot_file}"' in output
     assert "fallback_after_read" in output
 
+
+
+def test_read_artifact_routes_artifact_id_arguments(tmp_path: Path) -> None:
+    paths = _paths(tmp_path, "read_artifact")
+    text_file = paths["artifact"] / "page-md.txt"
+    text_file.parent.mkdir(parents=True, exist_ok=True)
+    text_file.write_text("Artifact body", encoding="utf-8")
+    artifact_id = opaque_id(text_file, "md")
+
+    by_argument, by_argument_meta = action_read_artifact(
+        tmp_path,
+        paths,
+        {"action": "read_artifact", "artifact_id": artifact_id, "max_chars": 1000},
+    )
+    by_path_value, by_path_value_meta = action_read_artifact(
+        tmp_path,
+        paths,
+        {"action": "read_artifact", "path": artifact_id, "max_chars": 1000},
+    )
+
+    assert "artifact_read_ok=true" in by_argument
+    assert "Artifact body" in by_argument
+    assert by_argument_meta["artifact_id"] == artifact_id
+    assert "artifact_read_ok=true" in by_path_value or "cached_artifact_read=true" in by_path_value
+    assert by_path_value_meta["artifact_id"] == artifact_id
 
 def test_read_artifact_directory_resolves_to_best_readable_file(tmp_path: Path) -> None:
     paths = _paths(tmp_path, "snapshot")

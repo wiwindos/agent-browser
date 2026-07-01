@@ -1123,14 +1123,21 @@ def action_desktop_screenshot(root: Path, paths: dict[str, Path], args: dict[str
 
 def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     raw_path = str(args.get("path") or args.get("file") or "").strip()
-    if not raw_path and args.get("artifact_id"):
-        from agent_browser_skill.actions_artifacts import _resolve
+    if args.get("artifact_id") and not raw_path:
+        from agent_browser_skill.actions_artifacts import action_read_artifact_by_id
 
-        target = _resolve(root, str(args.get("artifact_id")))
-    elif not raw_path:
-        raise ToolError("path is required for read_artifact; if you have artifact_id, use read_artifact_by_id or pass artifact_id to read_artifact")
-    else:
-        target = ensure_inside(Path(raw_path), root)
+        return action_read_artifact_by_id(root, paths, args)
+    if raw_path.startswith(("art_", "md_", "map_", "snap_")):
+        from agent_browser_skill.actions_artifacts import action_read_artifact_by_id
+
+        read_args = dict(args)
+        read_args["artifact_id"] = raw_path
+        read_args.pop("path", None)
+        read_args.pop("file", None)
+        return action_read_artifact_by_id(root, paths, read_args)
+    if not raw_path:
+        raise ToolError("path is required for read_artifact; pass artifact_id to read_artifact or use read_artifact_by_id")
+    target = ensure_inside(Path(raw_path), root)
     browser_artifacts_root = ensure_inside(root / "browser-artifacts", root)
     if browser_artifacts_root not in target.parents and target != browser_artifacts_root:
         raise ToolError("read_artifact only allows files inside browser-artifacts")
@@ -1222,6 +1229,7 @@ def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any
             f"artifact_size_bytes: {target.stat().st_size}",
             f"artifact_excerpt_chars: {len(excerpt)}",
             *( [f"artifact_filter: {'regex' if regex else 'query'}={regex or query}", f"artifact_filter_matches: {filter_meta.get('artifact_filter_matches', 0)}"] if query or regex else [] ),
+            "artifact_access_policy: Do not use search_files/read_file/run_command for browser artifacts. Use read_artifact_by_id with artifact_id; use search_artifact with query before rereading large artifacts.",
             "",
             cap_output(excerpt, 12000),
         ]
@@ -1696,7 +1704,8 @@ def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]
         "",
         cap_output(excerpt, max_chars + 500),
         "",
-        "next_step: choose a UI node_id/action from the Markdown and call page_markdown.act; for forum date requests, search the artifact first and paginate if needed",
+        "next_step: choose a UI node_id/action from the Markdown and call page_markdown.act; for forum date requests, call search_artifact with a focused query (for example a date like 30.06 or Вчера), answer from matches, and only paginate if not found",
+        "artifact_access_policy: Do not use search_files/read_file/run_command for browser artifacts. Use read_artifact_by_id with artifact_id; use search_artifact with query before rereading large artifacts.",
         "next_tool_call: " + json.dumps(act_call, ensure_ascii=False),
         "forum_date_search_next_tool_call: " + json.dumps(search_call, ensure_ascii=False),
         "if_not_found_next_tool_call: " + json.dumps({"action": "navigate_pagination", "profile": paths["site"].name, "target": "previous"}, ensure_ascii=False),

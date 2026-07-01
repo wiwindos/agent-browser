@@ -49,7 +49,7 @@ def action_list_artifacts(root: Path, paths: dict[str, Path], args: dict[str, An
         prefix = "md" if p.name.startswith("page-md") and p.suffix.lower() in {".txt", ".md"} else ("snap" if "snapshot" in p.name.lower() or "state" in p.name.lower() else "art")
         rows.append({"artifact_id": opaque_id(p, prefix), "name": p.name, "kind": prefix, "size_bytes": p.stat().st_size, "relative_key": str(rel)})
     meta = metadata(paths); meta["artifacts"] = rows
-    return "artifacts:\n" + json.dumps(rows, ensure_ascii=False, indent=2), meta
+    return "\n".join(["artifacts:", json.dumps(rows, ensure_ascii=False, indent=2), "", "artifact_access_policy: Do not use search_files/read_file/run_command for browser artifacts. Use read_artifact_by_id with artifact_id; use search_artifact with query before rereading large artifacts."]), meta
 
 
 def action_read_artifact_by_id(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
