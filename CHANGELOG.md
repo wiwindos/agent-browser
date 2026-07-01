@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.76
+
+- Ensured the browser tool CLI emits exactly one JSON object on stdout by redirecting stray runtime prints to stderr and recording a warning in the JSON payload.
+- Fixed Markdown-first pending workflow recovery so `page_markdown` advances to `read_page_md`, profile changes clear stale pending state, and close/recover/stop desktop clear per-profile workflow gates.
+- Hardened `page_markdown` artifact persistence by stat-checking required Markdown, elements, and full snapshot files before publishing artifact IDs.
+- Made artifact-reading actions lockless, canonicalized 4PDA profile aliases, and expanded cleanup output/recovery to remove old browser artifacts, downloads, screenshots, logs, and `node_env` while reporting top workspace directories.
+
 ## 0.3.75
 
 - Hardened Markdown-first workflow gates so pending `page_markdown`/`read_page_md` steps block legacy action escape hatches with `BLOCKED_PENDING_WORKFLOW_GATE`.

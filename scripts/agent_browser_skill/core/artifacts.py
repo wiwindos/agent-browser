@@ -81,6 +81,43 @@ def cleanup_browser_artifacts(root: Path, target_bytes: int = WORKSPACE_TARGET_B
     return notes
 
 
+
+def top_workspace_dirs(root: Path, limit: int = 8) -> list[str]:
+    rows: list[tuple[int, Path]] = []
+    for child in root.iterdir() if root.exists() else []:
+        if child.name in {".git"}:
+            continue
+        try:
+            size = path_size(child) if child.is_dir() else child.stat().st_size
+        except OSError:
+            continue
+        rows.append((size, child))
+    rows.sort(reverse=True, key=lambda item: item[0])
+    return [f"{path.relative_to(root)} ({size // 1024 // 1024}MB)" for size, path in rows[:limit]]
+
+
+def cleanup_downloads_screenshots_logs(root: Path) -> list[str]:
+    notes: list[str] = []
+    candidates: list[Path] = []
+    artifacts_root = root / "browser-artifacts"
+    if artifacts_root.exists():
+        for name in ("downloads", "screenshots", "logs"):
+            candidates.extend(path for path in artifacts_root.glob(f"*/*/{name}") if path.exists())
+    candidates.extend([root / ".agent-browser" / "logs", root / "node_env"])
+    for target in candidates:
+        try:
+            if not target.exists():
+                continue
+            size = path_size(target) if target.is_dir() else target.stat().st_size
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            notes.append(f"removed browser runtime data {target.relative_to(root)} ({size // 1024 // 1024}MB)")
+        except Exception as exc:
+            notes.append(f"cleanup skipped {target}: {exc}")
+    return notes
+
 def cleanup_runtime_caches(root: Path) -> list[str]:
     notes = []
     candidates = [
@@ -177,6 +214,8 @@ def auto_cleanup_if_needed(root: Path) -> list[str]:
         return notes
     notes.extend(cleanup_browser_artifacts(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
+        notes.extend(cleanup_downloads_screenshots_logs(root))
+    if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_runtime_caches(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_legacy_browser_use(root))
@@ -189,6 +228,8 @@ def cleanup_note(root: Path) -> str:
     notes = cleanup_empty_artifacts(root, keep_recent=0)
     notes.extend(cleanup_browser_artifacts(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
+        notes.extend(cleanup_downloads_screenshots_logs(root))
+    if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_runtime_caches(root))
     if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
         notes.extend(cleanup_legacy_browser_use(root))
@@ -196,12 +237,14 @@ def cleanup_note(root: Path) -> str:
         notes.extend(cleanup_profile_caches(root))
     size_mb = path_size(root) // 1024 // 1024
     if not notes:
-        return f"cleanup complete; workspace size: {size_mb}MB"
+        return "\n".join([f"cleanup complete; workspace size: {size_mb}MB", "top directories:", *top_workspace_dirs(root)])
     return "\n".join(
         [
             "cleanup complete",
             f"removed entries: {len(notes)}",
             f"workspace size: {size_mb}MB",
+            "top directories:",
+            *top_workspace_dirs(root),
             *notes[:20],
             *([f"...and {len(notes) - 20} more"] if len(notes) > 20 else []),
         ]
