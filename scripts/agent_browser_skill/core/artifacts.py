@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -44,8 +45,62 @@ def active_artifact_paths(root: Path) -> set[Path]:
     return active
 
 
+
+def artifact_dir_for_file(root: Path, path: Path) -> Path | None:
+    artifacts_root = root / "browser-artifacts"
+    try:
+        resolved = ensure_inside(path, root).resolve()
+        relative = resolved.relative_to(artifacts_root.resolve())
+    except Exception:
+        return None
+    parts = relative.parts
+    if len(parts) < 2:
+        return None
+    return (artifacts_root / parts[0] / parts[1]).resolve()
+
+
+def last_artifact(root: Path, site: str) -> Path | None:
+    site_dir = root / "browser-artifacts" / site
+    if not site_dir.exists():
+        return None
+    candidates = [path for path in site_dir.iterdir() if path.is_dir()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime if path.exists() else 0).resolve()
+
+
+def protected_artifact_dirs(root: Path) -> set[Path]:
+    protected: set[Path] = set(active_artifact_paths(root))
+    workflow_root = root / ".agent-browser" / "workflow"
+    if workflow_root.exists():
+        for state_file in workflow_root.glob("*.json"):
+            try:
+                state = json.loads(state_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for key in ("last_markdown_file", "last_elements_file", "last_text_file"):
+                value = state.get(key)
+                if not value:
+                    continue
+                artifact_dir = artifact_dir_for_file(root, Path(str(value)))
+                if artifact_dir:
+                    protected.add(artifact_dir)
+            site = state_file.stem
+            latest = last_artifact(root, site)
+            if latest:
+                protected.add(latest)
+    artifacts_root = root / "browser-artifacts"
+    if artifacts_root.exists():
+        for site_dir in artifacts_root.glob("*"):
+            if not site_dir.is_dir():
+                continue
+            latest = last_artifact(root, site_dir.name)
+            if latest:
+                protected.add(latest)
+    return {path.resolve() for path in protected if path}
+
 def cleanup_empty_artifacts(root: Path, keep_recent: int = KEEP_EMPTY_ARTIFACT_DIRS) -> list[str]:
-    active = active_artifact_paths(root)
+    active = protected_artifact_dirs(root)
     empty_dirs = [
         artifact
         for artifact in artifact_dirs(root)
@@ -68,7 +123,11 @@ def cleanup_browser_artifacts(root: Path, target_bytes: int = WORKSPACE_TARGET_B
     size = path_size(root)
     if size <= target_bytes:
         return notes
+    protected = protected_artifact_dirs(root)
     for artifact in artifact_dirs(root):
+        if artifact.resolve() in protected:
+            notes.append(f"kept active artifact {artifact.relative_to(root)}")
+            continue
         try:
             artifact_size = path_size(artifact)
             shutil.rmtree(artifact)

@@ -10,7 +10,8 @@ from typing import Any
 from agent_browser_skill.actions_generic import action_click, action_fill, action_open
 from agent_browser_skill.browser import cdp, dashboard, desktop
 from agent_browser_skill.core.args import bool_arg, int_arg, timeout_from
-from agent_browser_skill.core.artifacts import artifact_download_files
+from agent_browser_skill.core.config import WORKSPACE_SOFT_LIMIT_BYTES
+from agent_browser_skill.core.artifacts import artifact_download_files, auto_cleanup_if_needed, path_size
 from agent_browser_skill.core.output import cap_output, metadata
 from agent_browser_skill.core.paths import ensure_inside, remember_url, remembered_url
 from agent_browser_skill.core.snapshot_artifacts import compact_excerpt, write_json_artifact, write_text_artifact
@@ -962,7 +963,7 @@ def _page_markdown_next_lines(*, profile: str | None = None, legacy_text_file: P
         "PRIMARY_NEXT_TOOL_CALL: " + json.dumps(page_call, ensure_ascii=False),
         "next_step: call page_markdown, read the Markdown artifact with read_page_md, choose the needed UI node_id from content, then use page_markdown.act; the action returns refreshed Markdown",
         "next_tool_call: " + json.dumps(page_call, ensure_ascii=False),
-        "markdown_first_workflow: use Markdown content plus stable node_id values; specialized date/forum/search/table extractors and pagination helpers are optional fast paths only after Markdown inspection",
+        "markdown_first_workflow: use Markdown content plus revision-scoped node_id values; specialized date/forum/search/table extractors and pagination helpers are optional fast paths only after Markdown inspection",
         "do_not_use_for_text_extraction: desktop_screenshot, read_file, run_command, raw fetch_page, curl, large raw evaluate, action=run",
     ]
     if legacy_text_file is not None:
@@ -1122,9 +1123,14 @@ def action_desktop_screenshot(root: Path, paths: dict[str, Path], args: dict[str
 
 def action_read_artifact(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     raw_path = str(args.get("path") or args.get("file") or "").strip()
-    if not raw_path:
-        raise ToolError("path is required for read_artifact")
-    target = ensure_inside(Path(raw_path), root)
+    if not raw_path and args.get("artifact_id"):
+        from agent_browser_skill.actions_artifacts import _resolve
+
+        target = _resolve(root, str(args.get("artifact_id")))
+    elif not raw_path:
+        raise ToolError("path is required for read_artifact; if you have artifact_id, use read_artifact_by_id or pass artifact_id to read_artifact")
+    else:
+        target = ensure_inside(Path(raw_path), root)
     browser_artifacts_root = ensure_inside(root / "browser-artifacts", root)
     if browser_artifacts_root not in target.parents and target != browser_artifacts_root:
         raise ToolError("read_artifact only allows files inside browser-artifacts")
@@ -1595,6 +1601,14 @@ def _markdown_workflow_meta(markdown_file: Path | None = None, artifact_id: str 
 def action_page_markdown(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not desktop.manual_desktop_running(root):
         raise ToolError("manual desktop is not running; call desktop_open first")
+    if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
+        auto_cleanup_if_needed(root)
+    if path_size(root) > WORKSPACE_SOFT_LIMIT_BYTES:
+        raise ToolError(
+            "WORKSPACE_LIMIT_EXCEEDED: workspace is above the soft limit after safe cleanup; "
+            "next_tool_call={\"action\":\"cleanup\",\"aggressive\":true,\"include_runtime_env\":true}; "
+            "do not use run_command/rm/du/find for browser cleanup"
+        )
     max_chars = int_arg(args, "max_chars", 3000, 500, 12000)
     dom = cdp.cdp_eval(desktop.desktop_cdp_port_from(args), dom_extraction_script(int_arg(args, "max_blocks", 220, 20, 1000), int_arg(args, "max_elements", 250, 20, 1000)), timeout=timeout_from(args))
     if not isinstance(dom, dict):
@@ -1618,7 +1632,7 @@ def action_page_markdown(root: Path, paths: dict[str, Path], args: dict[str, Any
     meta.update({"manual_desktop_active": True, "current_url": snapshot["url"], "title": snapshot["title"], "markdown_file": str(md_file), "text_file": str(md_file), "artifact_id": artifact_id, "elements_file": str(elements_file), "elements_artifact_id": elements_id, "page_markdown_file": str(full_file), "revision": snapshot["revision"], "stable": snapshot["stable"], "content_md_length": len(snapshot["content_md"]), "ui_elements_count": len(snapshot["actionable_nodes"]), "warnings": snapshot.get("warnings") or [], **sizes})
     meta.update(_markdown_workflow_meta(md_file, artifact_id, profile=paths["site"].name))
     excerpt = snapshot["markdown"][:max_chars] + ("\n...[truncated; read markdown_file artifact for full content]" if len(snapshot["markdown"]) > max_chars else "")
-    return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and UI node_id values, then use page_markdown.act for page-changing actions; it returns the refreshed Markdown", "next_tool_call: " + json.dumps({"action":"read_page_md","profile":paths["site"].name,"max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta
+    return "\n".join(["page_markdown_ok=true", f"current_url: {snapshot['url']}", f"title: {snapshot['title']}", f"artifact_id: {artifact_id}", f"markdown_file: {md_file}", f"elements_artifact_id: {elements_id}", f"elements_file: {elements_file}", f"page_markdown_file: {full_file}", f"revision: {snapshot['revision']}", f"stable: {str(snapshot['stable']).lower()}", f"warnings_count: {len(snapshot.get('warnings') or [])}", f"content_md_length: {len(snapshot['content_md'])}", f"ui_elements_count: {len(snapshot['actionable_nodes'])}", "next_step: call read_page_md, reason over content and revision-scoped UI node_id values, then use page_markdown.act for page-changing actions; it returns the refreshed Markdown", "next_tool_call: " + json.dumps({"action":"read_page_md","profile":paths["site"].name,"max_chars":max_chars}, ensure_ascii=False), "", cap_output(excerpt, max_chars + 500)]), meta
 
 
 def action_read_page_md(root: Path, paths: dict[str, Path], args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
